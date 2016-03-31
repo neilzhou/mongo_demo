@@ -7,7 +7,7 @@
     <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#scanReplSetModal">Scan Replica Set in LAN</button>
 </div>
 <p></p>
-<div class="rs-panel-group">
+<div class="rs-panel-group" data-after="callback_after_load_replset">
 <?php
 
 if (!empty($rs_list)) {

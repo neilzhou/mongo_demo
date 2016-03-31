@@ -26,11 +26,15 @@ class MongoReplSetController extends AppController {
             $start_time = microtime(true);
             CakeLog::info("San start time: $start_time");
             $checked_members = array();
+            $result = array();
 
             for ($i = $from_ip32_int; $i <= $to_ip32_int; $i++) {
                 // code...
                 $check_ip = long2ip($i);
-                $mStatus = false;
+                if (isset($checked_members[$check_ip . ':' . $port])) {
+                    CakeLog::info("Scan skip $check_ip:$port for existed.");
+                    continue;
+                }
 
                 $time1 = microtime(true);
                 if($this->MongoReplSet->pingServer($check_ip) && $this->MongoReplSet->pingServerPort($check_ip, $port)) {
@@ -40,21 +44,39 @@ class MongoReplSetController extends AppController {
                             'port' => $port,
                         )
                     );
-                    $result = $this->MongoReplSet->checkReplSetConn($rs_name, $check_member);
+                    $check_status = $this->MongoReplSet->checkReplSetConn($rs_name, $check_member);
+                    if ($check_status['success']) {
+                        $result[$rs_name]['success'][] = $check_status;
+                    } else {
+                        $result[$rs_name]['failed'][] = $check_status;
+                    }
+                    foreach ($check_status['data'] as $value) {
+                        $checked_members[$value['check_name']] = 1;
+                    }
                 }
                 $time2 = microtime(true);
                 CakeLog::info("San host[$check_ip], port[$port] offset: " . ($time2 - $time1));
             }
             $end_time = microtime(true);
             CakeLog::info("Scan end, scan total num:[" . ($to_ip32_int - $from_ip32_int) . "] time:[$end_time], offset:" . ($end_time - $start_time));
+            CakeLog::info("Scan end, scan result: " . json_encode($result));
+            CakeLog::info("Scan end, scan checked members:" . json_encode($checked_members));
             //$this->MongoReplSet->create();
             //$this->MongoReplSet->save(array(
                 //'rs_name' => $rs_name,
                 //'members' => $members
             //));
 
-            //$this->renderJsonWithSuccess($mStatus);
+            foreach ($result as $rs_name => $rs) {
+                if (isset($rs['success'])) {
+                    $this->_saveRsSuccessMembers($rs['success']);
+                }
+                if (isset($rs['failed'])) {
+                    $this->_saveRsFailedMembers($rs['failed'], $rs_name);
+                }
+            }
             $this->renderJsonWithSuccess($result);
+            //$this->render('scan');
         } else {
             $list = $this->MongoReplSet->find('all');
             $rs_list = array();
@@ -71,6 +93,38 @@ class MongoReplSetController extends AppController {
             $this->set('rs_list', $rs_list);
         }
 	}
+
+    private function _saveRsFailedMembers($rses, $rs_name) {
+        $data = array(
+            'rs_name' => $rs_name,
+            'members' => array()
+        );
+        foreach ($rses as $r) {
+            foreach ($r['data'] as $m) {
+                $data['members'][] = array('host' => $m['host'], 'port' => $m['port']);
+            }
+        }
+        if (empty($data['members'])) {
+            // code...
+            return ;
+        }
+        $this->MongoReplSet->create();
+        $this->MongoReplSet->save($data);
+    }
+    private function _saveRsSuccessMembers($rses) {
+        foreach ($rses as $r) {
+            $members = array();
+            foreach ($r['data'] as $m) {
+                $members[] = array('host' => $m['host'], 'port' => $m['port']);
+            }
+            $this->MongoReplSet->create();
+            $data = array(
+                'rs_name' => $r['rs_name'],
+                'members' => $members
+            );
+            $this->MongoReplSet->save($data);
+        }
+    }
 
     public function delete($id) {
         $this->MongoReplSet->id = $id;

@@ -39,7 +39,6 @@ class MongoReplSet extends AppModel{
         foreach($members as $m) {
             $members_str[] = $m['host'] . ':' . $m['port'];
         }
-
         try {
             App::uses('MongodbSource', 'Mongodb.Model/Datasource');
             $conf = array(
@@ -97,6 +96,7 @@ class MongoReplSet extends AppModel{
                 $result['data'][$m['name']] = array(
                     'host' => $host,
                     'port' => $port,
+                    'check_name' => $m['name'],
                     'rs_status' => $m['stateStr'],
                     'conn_status' => 'Success',
                     'success' => ($m['health']) ? true : false,
@@ -110,9 +110,10 @@ class MongoReplSet extends AppModel{
                     continue;
                 }
                 $success = false;
-                $result['data'][] = array(
+                $result['data'][$check] = array(
                     'host' => $m['host'],
                     'port' => $m['port'],
+                    'check_name' => $check,
                     'rs_status' => (isset($rsMembers[$check]) ? $rsMembers[$check] : 'Unknow'),
                     'conn_status' => $success ? 'Success' : 'Failed',
                     'success' => $success,
@@ -140,7 +141,10 @@ class MongoReplSet extends AppModel{
      **/
     public function checkReplSetConn($rs_name, $members)
     {
+        $time1 = microtime(true);
         $status = $this->connectRs($rs_name, $members);
+        $time2 = microtime(true);
+        CakeLog::info("checkReplSetConn connectRS rsname[$rs_name] offset:" . ($time2 - $time1));
         $failedCodes = [
             'ERROR-CALL-WIN-MONGO-CMD',
             'ERROR-CONNECTION-FAILED',
@@ -156,14 +160,17 @@ class MongoReplSet extends AppModel{
                 $connStatus = in_array($mStatus['code'], $failedCodes) ? 'Failed' : 'Success';
                 $mStatus['host'] = $m['host'];
                 $mStatus['port'] = $m['port'];
+                $mStatus['check_name'] = $m['host'] . ':' . $m['port'];
                 $mStatus['rs_status'] = 'Unkown';
                 $mStatus['conn_status'] = $connStatus;
-                $status['data'][] = $mStatus;
+                $status['data'][$mStatus['check_name']] = $mStatus;
             }
             $status['init_replset'] = $initReplSet;
         }
 
         $status['rs_name'] = $rs_name;
+        $time3 = microtime(true);
+        CakeLog::info("checkReplSetConn rsname[$rs_name] offset:" .($time3 - $time1). ", cmd check members offset:" . ($time3 - $time2));
         return $status;
     }
 

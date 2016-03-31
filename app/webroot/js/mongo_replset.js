@@ -73,8 +73,7 @@ function callback_after_scan_replset(obj, target, resp) {
 }
 
 function callback_after_load_replset(obj, target, resp) {
-    var $this = $(obj);
-    $this.html(resp);
+    $('[data-toggle="tooltip"]', $(obj)).tooltip();
 }
 
 function callback_after_add_replset(form, target, resp){

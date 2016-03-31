@@ -12,6 +12,7 @@
 cscope.file
 cscope.out
 ncscope.out
+*.swp
 tags
 
 # IDE and editor specific files #
