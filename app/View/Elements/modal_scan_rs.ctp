@@ -24,14 +24,15 @@ echo $this->Form->create('MongoReplSet', array(
     'url' => '/mongo_repl_set/index'
 ));
 ?>
-<?php echo $this->Form->input('rs_name', array(
+<?php 
+/*echo $this->Form->input('rs_name', array(
     'label' => array(
         'text' => 'Name:'
     ),
     //'placeholder' => 'Replica Set Name'
     'placeholder' => 'rs0',
     'value' => 'rs0'
-));
+));*/
 ?>
 <?php echo $this->Form->input('MongoReplSet.from_host', array(
     'label' => array(

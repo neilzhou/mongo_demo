@@ -13,7 +13,7 @@ class MongoReplSetController extends AppController {
             // code...
             ini_set('max_execution_time', 30 * 60);
             $data = $this->request->data['MongoReplSet'];
-            $rs_name = $data['rs_name'];
+            $rs_name = ''; //$data['rs_name'];
             $from_ip = $data['from_host'];
             $to_ip = $data['to_host'];
             $port = $data['port'];
@@ -27,6 +27,13 @@ class MongoReplSetController extends AppController {
             CakeLog::info("San start time: $start_time");
             $checked_members = array();
             $result = array();
+            $errors = array(
+                //'success' => false,
+                //'code' => 'ERROR-INIT',
+                //'message' => 'Connect mongoDB failed.',
+                //'rs_name' => '',
+                //'data' => array(),
+            );
 
             for ($i = $from_ip32_int; $i <= $to_ip32_int; $i++) {
                 // code...
@@ -45,48 +52,55 @@ class MongoReplSetController extends AppController {
                         )
                     );
                     $check_status = $this->MongoReplSet->checkReplSetConn($rs_name, $check_member);
-                    if ($check_status['success']) {
-                        $result[$rs_name]['success'][] = $check_status;
-                    } else {
-                        $result[$rs_name]['failed'][] = $check_status;
+                    CakeLog::info("San host[$check_ip], port[$port] status:" . json_encode($check_status));
+                    if (empty($check_status['success']) && $check_status['code'] == 'ERROR-NO-RUNNING-WITH-REPLSET') {
+                        continue;
                     }
-                    foreach ($check_status['data'] as $value) {
-                        $checked_members[$value['check_name']] = 1;
+                    foreach ($check_status['data'] as $member) {
+                        $checked_members[$member['check_name']] = 1;
+                    }
+                    if ($check_status['success']) {
+                        $result[] = $check_status;
+                    } else {
+                        $rs_name = emtpy($check_status['rs_name']) ? 'No replset name' : $check_status['rs_name'];
+                        if (empty($errors[$rs_name]['init_replset'])) {
+                            $check_status['data'] = array_merge($errors[$rs_name]['data'], $check_status['data']);
+                            $errors[$rs_name] = array_merge($errors[$rs_name], $check_status);
+                        } else {
+                            $errors[$rs_name]['data'] = array_merge($errors[$rs_name]['data'], $check_status['data']);
+                        }
                     }
                 }
                 $time2 = microtime(true);
                 CakeLog::info("San host[$check_ip], port[$port] offset: " . ($time2 - $time1));
             }
+            $this->_saveRsMembers($result);
+            $this->_saveRsMembers($errors);
             $end_time = microtime(true);
             CakeLog::info("Scan end, scan total num:[" . ($to_ip32_int - $from_ip32_int) . "] time:[$end_time], offset:" . ($end_time - $start_time));
             CakeLog::info("Scan end, scan result: " . json_encode($result));
             CakeLog::info("Scan end, scan checked members:" . json_encode($checked_members));
+            CakeLog::info("Scan end, scan errors members:" . json_encode($errors));
             //$this->MongoReplSet->create();
             //$this->MongoReplSet->save(array(
                 //'rs_name' => $rs_name,
                 //'members' => $members
             //));
 
-            foreach ($result as $rs_name => $rs) {
-                if (isset($rs['success'])) {
-                    $this->_saveRsSuccessMembers($rs['success']);
-                }
-                if (isset($rs['failed'])) {
-                    $this->_saveRsFailedMembers($rs['failed'], $rs_name);
-                }
-            }
             $this->renderJsonWithSuccess($result);
             //$this->render('scan');
         } else {
             $list = $this->MongoReplSet->find('all');
             $rs_list = array();
-
             if (!empty($list)) {
                 // code...
                 foreach($list as $rs) {
-                    $rs = $rs['MongoReplSet'];
-                    $rs_status = $this->MongoReplSet->checkReplSetConn($rs['rs_name'], $rs["members"]);
-                    $rs_status['id'] = $rs['_id'];
+                    $rs_db = $rs['MongoReplSet'];
+                    $rs_status = $this->MongoReplSet->checkReplSetConn($rs_db['rs_name'], $rs_db["members"]);
+                    $rs_status['id'] = $rs_db['_id'];
+
+                    CakeLog::info('demo index rs db:' . json_encode($rs_db));
+                    CakeLog::info('demo index rs status:' . json_encode($rs_status));
                     $rs_list[] = $rs_status;
                 }
             }
@@ -94,24 +108,7 @@ class MongoReplSetController extends AppController {
         }
 	}
 
-    private function _saveRsFailedMembers($rses, $rs_name) {
-        $data = array(
-            'rs_name' => $rs_name,
-            'members' => array()
-        );
-        foreach ($rses as $r) {
-            foreach ($r['data'] as $m) {
-                $data['members'][] = array('host' => $m['host'], 'port' => $m['port']);
-            }
-        }
-        if (empty($data['members'])) {
-            // code...
-            return ;
-        }
-        $this->MongoReplSet->create();
-        $this->MongoReplSet->save($data);
-    }
-    private function _saveRsSuccessMembers($rses) {
+    private function _saveRsMembers($rses) {
         foreach ($rses as $r) {
             $members = array();
             foreach ($r['data'] as $m) {

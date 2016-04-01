@@ -139,7 +139,7 @@ class MongoReplSet extends AppModel{
      * @return void
      * @author Neil.zhou
      **/
-    public function checkReplSetConn($rs_name, $members)
+    public function checkReplSetConnOld($rs_name, $members)
     {
         $time1 = microtime(true);
         $status = $this->connectRs($rs_name, $members);
@@ -174,13 +174,114 @@ class MongoReplSet extends AppModel{
         return $status;
     }
 
+    /**
+     * checkReplSetConn
+     *
+     * @return array(
+     *         'success' => true|false
+     *         'code' => xxx
+     *         'rs_name' => xxx
+     *         'message' => xxx
+     *         'data' => array(
+     *          '0' => array(
+     *             'success' => true|false,
+     *             'code' => xxx,
+     *             'message' => xxx,
+     *             'host' => xxx
+     *             'port' => xxx
+     *             'check_name'' => xxx,
+     *             'rs_status' => xxx,
+     *             'conn_status' => xxx
+     *         )
+     *       )
+     * )
+     *
+     */
+    public function checkReplSetConn($rs_name, $members)
+    {
+
+        $time1 = microtime(true);
+        $status = array(
+            'success' => false,
+            'code'    => 'ERROR-init',
+            'message' => 'Connect MongoDB failed.',
+            'rs_name' => $rs_name,
+            'init_replset' => false,
+            'data' => array()
+        );
+
+        // if  some members of the replica set are not config replica set and the replica set is not setup, then set it true. which notice end-user to initiate the replica set.
+        $initReplSet = false;
+        $checkedMembers = array();
+        // if one replica set has two primary member, means conflict in one replica set. which is caused by manually adding another replica set members.
+        $conflictRs = false; 
+
+        foreach($members as $m) {
+            $check_name = $m['host'] . ":" . $m['port'];
+            if (isset($checkedMembers[$check_name])) {
+                continue;
+            }
+            $mStatus = $this->mongoReplSetConnectStatus($m['host'], $m['port'], $rs_name);
+            if ($status['success'] && $mStatus['success']) {
+                $conflictRs = true;
+                $status['code'] = 'ERROR-CONFLICT-REPLSET';
+            } else {
+                $conflictRs = false; // reset to false if current status is false.
+            }
+            if ($mStatus['success']) {
+                $status['success'] = true;
+                $status['code'] = $mStatus['code'];
+                $status['message'] = $mStatus['message'];
+            }
+            
+            // set error code and error message if replica set is not set up.
+            if ($mStatus['init_replset']) {
+                $status['init_replset'] = true;
+                $status['code'] = $mStatus['code'];
+                $status['message'] = $mStatus['message'];
+            } elseif (empty($status['success']) && empty($status['init_replset'])) {
+                $status['code'] = $mStatus['code'];
+                $status['message'] = $mStatus['message'];
+            }
+
+            $status['rs_name'] = $mStatus['rs_name'];
+            foreach ($mStatus['data'] as $member) {
+                if ($conflictRs) {
+                    $member['is_conflict'] = true;
+                    $member['success'] = false;
+                    $member['message'] = 'The replica set has two primary member, which is caused by adding another replica set member.';
+                }
+                $checkedMembers[$member['check_name']] = 1;
+                $status['data'][] = $member;
+            }
+        }
+        $time3 = microtime(true);
+        CakeLog::info("checkReplSetConn rsname[$rs_name] offset:" .($time3 - $time1). ", cmd check members offset:" . ($time3 - $time1));
+        return $status;
+    }
+    
+
     public function mongoReplSetConnectStatus($host, $port, $rs_name = 'rs0')
     {
+        $host_port_key = $host . ':' . $port;
         $result = array(
             'success' => false, 
             'code' => 'ERROR-INIT-MONGO-COMMAND',
-            'data' => array(),
-            'message' => 'Connect mongoDB failed.'
+            'rs_name' => $rs_name,
+            'init_replset' => false,
+            'message' => 'Connect mongoDB failed.',
+            'data' => array(
+                "$host_port_key" => array(
+                    'host' => $host, 
+                    'port' => $port, 
+                    'check_name' => $host . ':' . $port,
+                    'rs_status' => 'Unknown', 
+                    'conn_status' => true,
+                    'success' => false,
+                    'is_conflict' => false,
+                    'message' => 'Connect mongoDB failed.'
+                )
+            ),
         );
         if (empty($host) || empty($port)) {
             // code...
@@ -189,33 +290,103 @@ class MongoReplSet extends AppModel{
         }
 
         $status = $this->callWindowsMongoCmd($host, $port, 'rs.status()');
+        CakeLog::info("rs.status raw data:" . $status);
         $result['detail'] = $status;
+        $parse_status = false;
+
         if (empty($status)) {
             $result['code'] = 'ERROR-CALL-WIN-MONGO-CMD';
-
-        } else if(strpos($status, 'run rs.initiate(') !== false) {
-            $result['code'] = 'ERROR-NO-REPLSET-CONFIG';
-            $result['message'] = 'Does not have a vallid replica set config.';
-
-        } else if(strpos($status, 'not running with --replSet') !== false) {
-            $result['code'] = 'ERROR-NO-RUNNING-WITH-REPLSET';
-            $result['message'] = 'Does not running with --replSet.';
+            $result['data']["$host_port_key"]['conn_status'] = false;
+            return $result;
 
         } else if(strpos($status, 'connection attempt failed') !== false) {
             $result['code'] = 'ERROR-CONNECTION-FAILED';
             $result['message'] = 'Couldn\'t connect to server ' . $host . ':' . $port . '.';
+            $result['data']["$host_port_key"]['conn_status'] = false;
+            return $result;
+
+        } else if(strpos($status, 'not running with --replSet') !== false) {
+            $result['code'] = 'ERROR-NO-RUNNING-WITH-REPLSET';
+            $result['message'] = 'Does not running with --replSet.';
+            return $result;
+
+        } 
+
+        if (empty($rs_name)) {
+            $rs_name = $this->_getMongoReplsetName($host, $port);
+            $result['rs_name'] = $rs_name;
+            if (empty($rs_name)) {
+                $result['code'] = 'ERROR-NO-REPLSET-NAME';
+                $result['message'] = 'Does not get replica set name.';
+            }
+        }
+
+        if(strpos($status, 'run rs.initiate(') !== false) {
+            $result['code'] = 'ERROR-NO-REPLSET-CONFIG';
+            $result['message'] = 'Does not have a vallid replica set config.';
+            $result['init_replset'] = true;
 
         } else if(strpos($status, '"set" : "'.$rs_name.'"') === false) {
             $result['code'] = 'ERROR-REPLSET-NAME-NOT-MATCH';
             $result['message'] = 'Couldn\'t connect to replset name: ' . $rs_name;
 
-        } else if(strpos($status, '"myState" : 1') !== false) {
+        } else if(strpos($status, '"stateStr" : "PRIMARY"') !== false) {
             $result['success'] = true;
             $result['code'] = 'SUCCESS';
             $result['message'] = 'OK!';
+            $parse_status = true;
 
-        } else {
+        } else if(strpos($status, '"members"') !== false) {
+            $parse_status = true;
+            $result['code'] = 'ERROR-NO-PRIMARY';
+        }else {
             $result['code'] = 'ERROR-UNKNOWN';
+        }
+
+        if ($parse_status) {
+            $resp = $this->_parseMongoCmdResp($status);
+            if (!empty($resp) && isset($resp['members'])) {
+                $result['data'] = array(); // reset to empty array.
+                foreach ($resp['members'] as $m) {
+                    list($host, $port) = explode(':', $m['name']);
+                    $result['data'][$m['name']] = array(
+                        'host' => $host,
+                        'port' => $port,
+                        'check_name' => $m['name'],
+                        'rs_status' => $m['stateStr'],
+                        'conn_status' => 'Success',
+                        'success' => ($m['health']) ? true : false,
+                        'message' => $m['stateStr']
+                    );
+                }
+            }
+        }
+        return $result;
+    }
+
+    private function _getMongoReplsetName($host, $port) {
+        $resp = $this->callWindowsMongoCmd($host, $port, 'db.serverCmdLineOpts().parsed.replication');
+        if (empty($resp)) {
+            return false;
+        }
+        if (strpos($resp, '"replSetName"') === false) {
+            return false;
+        }
+        $arr = $this->_parseMongoCmdResp($resp);
+        return empty($arr['replSetName']) ? false : $arr['replSetName'];
+    }
+
+    private function _parseMongoCmdResp($resp) {
+        $result = array();
+        $resp = str_replace(array("\r\n", "\r", "\n", "\t"), '', $resp);
+        $resp = preg_replace(array(
+            '/ISODate\((.*?)\)/',
+            '/NumberLong\((.*?)\)/',
+            '/Timestamp\((\d+),.*?\)/', 
+            '/ISODate\((.*?)\)/', 
+        ), array('\1', '\1', '\1', '\1'), $resp);
+        if (preg_match("/{.*}/", $resp, $matches)) {
+            $result = json_decode(stripslashes($matches[0]), true);
         }
 
         return $result;
