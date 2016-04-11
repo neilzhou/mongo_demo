@@ -3,3 +3,19 @@
 	RewriteRule ^$ app/webroot/ [L]
 	RewriteRule (.*) app/webroot/$1 [L]
 </IfModule>
+#<IfModule mod_deflate.c>
+    #SetOutputFilter DEFLATE            
+ ##开启压缩
+    #SetEnvIfNoCase Request_URI .(?:gif|jpe?g|png)$ no-gzip dont-vary       
+ ##不压缩图片
+    #SetEnvIfNoCase Request_URI .(?:exe|t?gz|zip|bz2|rar)$ no-gzip dont-vary 
+##不压缩压缩包
+    #SetEnvIfNoCase Request_URI .(?:pdf|doc)$ no-gzip dont-vary
+    #AddOutputFilterByType DEFLATE text/*    
+##压缩形如text/plain text/html text/css之类的文本数据
+    ##压缩js，xml文件
+    #AddOutputFilterByType DEFLATE application/javascript application/x-javascript application/xml
+    #AddOutputFilterByType DEFLATE application/x-httpd-php   
+##压缩php生成的文档
+#</IfModule>
+

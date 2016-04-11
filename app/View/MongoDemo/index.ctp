@@ -9,7 +9,6 @@
 <p></p>
 <div class="rs-panel-group" data-after="callback_after_load_replset">
 <?php
-
 if (!empty($rs_list)) {
     // code...
     foreach ($rs_list as $rs) {
@@ -18,6 +17,7 @@ if (!empty($rs_list)) {
 }
 ?>
 </div>
+<!-- /sheepIt Form -->
  <!-- <div class="panel panel-default">
      <div class="panel-heading">ReplSetName: rs0</div>
      <div class="panel-body">
@@ -53,11 +53,14 @@ if (!empty($rs_list)) {
 <?php echo $this->element('modal_remove_member');?>
 <?php echo $this->element('modal_scan_rs');?>
 <?php echo $this->element('modal_remove_replset');?>
+<?php echo $this->element('modal_reconfig_replset');?>
+<?php echo $this->element('modal_clear_data');?>
 <!-- /.modal -->
 
 <?php
 $this->Html->script("common", array("block" => 'script'));
 $this->Html->script("jquery.ajax-form", array("block" => 'script'));
 $this->Html->script("jquery.blockUI", array("block" => 'script'));
+$this->Html->script("jquery.sheepItPlugin-1.1.1", array("block" => 'script'));
 $this->Html->script("mongo_replset", array("block" => 'script'));
 ?>

@@ -9,8 +9,10 @@ class MongoReplSet extends AppModel{
             'rs_name' => array('type'=>'string'),
             'members'=>array(
                 array(
+                    '_id'  => array('type' => 'integer'),
                     'host' => array('type' => 'string'),
                     'port' => array('type' => 'string'),
+                    'status' => array('type' => 'boolean'),
                 )
             ),
             'created'=>array('type'=>'datetime'),
@@ -37,7 +39,15 @@ class MongoReplSet extends AppModel{
 
         $members_str = array();
         foreach($members as $m) {
+            if (empty($m['status'])) {
+                //continue;
+            }
             $members_str[] = $m['host'] . ':' . $m['port'];
+        }
+        if (empty($members_str)) {
+            $result['message'] = 'No candidate servers found';
+            $result['code'] = 'ERROR-EMPTY-VALID-MEMBER';
+            return $result;
         }
         try {
             App::uses('MongodbSource', 'Mongodb.Model/Datasource');
@@ -199,8 +209,8 @@ class MongoReplSet extends AppModel{
      */
     public function checkReplSetConn($rs_name, $members)
     {
-
         $time1 = microtime(true);
+        $rs_name = empty($rs_name) ? '' : $rs_name;
         $status = array(
             'success' => false,
             'code'    => 'ERROR-init',
@@ -209,6 +219,9 @@ class MongoReplSet extends AppModel{
             'init_replset' => false,
             'data' => array()
         );
+        if (empty($members)) {
+            return $status;
+        }
 
         // if  some members of the replica set are not config replica set and the replica set is not setup, then set it true. which notice end-user to initiate the replica set.
         $initReplSet = false;
@@ -244,7 +257,7 @@ class MongoReplSet extends AppModel{
                 $status['message'] = $mStatus['message'];
             }
 
-            $status['rs_name'] = $mStatus['rs_name'];
+            $status['rs_name'] = empty($mStatus['rs_name']) ? $status['rs_name'] : $mStatus['rs_name'];
             foreach ($mStatus['data'] as $member) {
                 if ($conflictRs) {
                     $member['is_conflict'] = true;
@@ -272,11 +285,13 @@ class MongoReplSet extends AppModel{
             'message' => 'Connect mongoDB failed.',
             'data' => array(
                 "$host_port_key" => array(
+                    '_id'  => 0, 
                     'host' => $host, 
                     'port' => $port, 
                     'check_name' => $host . ':' . $port,
                     'rs_status' => 'Unknown', 
-                    'conn_status' => true,
+                    'code' => 'ERROR-INIT-MONGO-COMMAND',
+                    'conn_status' => 'Success',
                     'success' => false,
                     'is_conflict' => false,
                     'message' => 'Connect mongoDB failed.'
@@ -296,24 +311,25 @@ class MongoReplSet extends AppModel{
 
         if (empty($status)) {
             $result['code'] = 'ERROR-CALL-WIN-MONGO-CMD';
-            $result['data']["$host_port_key"]['conn_status'] = false;
+            $result['data']["$host_port_key"]['conn_status'] = 'Failed';
             return $result;
 
         } else if(strpos($status, 'connection attempt failed') !== false) {
             $result['code'] = 'ERROR-CONNECTION-FAILED';
-            $result['message'] = 'Couldn\'t connect to server ' . $host . ':' . $port . '.';
-            $result['data']["$host_port_key"]['conn_status'] = false;
+            $result['data'][$host_port_key]['message'] = $result['message'] = 'Couldn\'t connect to server ' . $host . ':' . $port . '.';
+            $result['data']["$host_port_key"]['conn_status'] = 'Failed';
             return $result;
 
         } else if(strpos($status, 'not running with --replSet') !== false) {
             $result['code'] = 'ERROR-NO-RUNNING-WITH-REPLSET';
-            $result['message'] = 'Does not running with --replSet.';
+            $result['data'][$host_port_key]['message'] = $result['message'] = 'Does not running with --replSet.';
+            $result['data'][$host_port_key]['rs_status'] = 'no option --replSet.';
             return $result;
 
         } 
 
         if (empty($rs_name)) {
-            $rs_name = $this->_getMongoReplsetName($host, $port);
+            $rs_name = $this->getMongoReplsetName($host, $port);
             $result['rs_name'] = $rs_name;
             if (empty($rs_name)) {
                 $result['code'] = 'ERROR-NO-REPLSET-NAME';
@@ -326,7 +342,7 @@ class MongoReplSet extends AppModel{
             $result['message'] = 'Does not have a vallid replica set config.';
             $result['init_replset'] = true;
 
-        } else if(strpos($status, '"set" : "'.$rs_name.'"') === false) {
+        } else if(strpos($status, '"set"') !== false && strpos($status, '"set" : "'.$rs_name.'"') === false) {
             $result['code'] = 'ERROR-REPLSET-NAME-NOT-MATCH';
             $result['message'] = 'Couldn\'t connect to replset name: ' . $rs_name;
 
@@ -339,32 +355,46 @@ class MongoReplSet extends AppModel{
         } else if(strpos($status, '"members"') !== false) {
             $parse_status = true;
             $result['code'] = 'ERROR-NO-PRIMARY';
-        }else {
+
+        } else if(strpos($status, '"ok"') !== false) {
+            $parse_status = true;
+            $result['code'] = 'ERROR-OTHERS';
+
+        } else {
             $result['code'] = 'ERROR-UNKNOWN';
         }
 
+        $result['data'][$host_port_key]['message'] = $result['message'];
+
         if ($parse_status) {
-            $resp = $this->_parseMongoCmdResp($status);
+            $resp = $this->parseMongoCmdResp($status);
             if (!empty($resp) && isset($resp['members'])) {
                 $result['data'] = array(); // reset to empty array.
                 foreach ($resp['members'] as $m) {
                     list($host, $port) = explode(':', $m['name']);
                     $result['data'][$m['name']] = array(
+                        '_id' => $m['_id'],
                         'host' => $host,
                         'port' => $port,
                         'check_name' => $m['name'],
+                        'code' => $result['code'],
                         'rs_status' => $m['stateStr'],
                         'conn_status' => 'Success',
-                        'success' => ($m['health']) ? true : false,
+                        'success' => ($m['health'] === 1) ? true : false,
                         'message' => $m['stateStr']
                     );
                 }
-            }
+            } else if(!empty($resp)) {
+                isset($resp['stateStr']) && ($result['data'][$host_port_key]['rs_status'] = $resp['stateStr']);
+                isset($resp['errmsg']) && ($result['data'][$host_port_key]['message'] = $resp['errmsg']);
+                $result['data'][$host_port_key]['code'] = $result['code'];
+            } 
         }
+        CakeLog::info("check cmd rs.status hostport result:" . json_encode($result));
         return $result;
     }
 
-    private function _getMongoReplsetName($host, $port) {
+    public function getMongoReplsetName($host, $port) {
         $resp = $this->callWindowsMongoCmd($host, $port, 'db.serverCmdLineOpts().parsed.replication');
         if (empty($resp)) {
             return false;
@@ -372,11 +402,11 @@ class MongoReplSet extends AppModel{
         if (strpos($resp, '"replSetName"') === false) {
             return false;
         }
-        $arr = $this->_parseMongoCmdResp($resp);
+        $arr = $this->parseMongoCmdResp($resp);
         return empty($arr['replSetName']) ? false : $arr['replSetName'];
     }
 
-    private function _parseMongoCmdResp($resp) {
+    private function parseMongoCmdResp($resp) {
         $result = array();
         $resp = str_replace(array("\r\n", "\r", "\n", "\t"), '', $resp);
         $resp = preg_replace(array(
@@ -397,7 +427,7 @@ class MongoReplSet extends AppModel{
         $timeout = 2; // micro-seconds
         exec(sprintf('ping -n 1 -w ' . $timeout . ' %s', escapeshellarg($host)), $res, $rval);
         $end = microtime(true);
-        CakeLog::info( "pingServer($host) running offset time:" . ($end - $begin));
+        CakeLog::info( "pingServer($host) rval[$rval] running offset time:" . ($end - $begin));
         return $rval === 0;
     }
 
@@ -415,7 +445,7 @@ class MongoReplSet extends AppModel{
         return $status;
     }
 
-    public function callWindowsMongoCmd($host, $port, $shell_command)
+    public function callWindowsMongoCmd($host, $port, $shell_command, $parsed = false)
     {
     
         if(empty($host) || empty($port) || empty($shell_command)) return false;
@@ -431,6 +461,64 @@ class MongoReplSet extends AppModel{
         $commandLine = <<<STR
 start /B "mongoClientWindow" "$exe" $host:$port --quiet --eval "$command"
 STR;
-        return shell_exec($commandLine); 
+        $result = shell_exec($commandLine); 
+        if ($parsed) {
+            $result_parsed = $this->parseMongoCmdResp($result);
+            if (!empty($result_parsed)) {
+                $result = $result_parsed;
+            }
+        }
+        return $result;
+    }
+
+    public function saveOrUpdateReplset($data){
+        $id = empty($data['_id']) ? 0 : $data['_id'];
+        $id = empty($id) ? (empty($data['id']) ? 0 : $data['id']) : $id;
+        $saveData = array(
+            'rs_name' => $data['rs_name']
+        );
+        foreach ($data['data'] as $m) {
+            $saveData['members'][] = array(
+                '_id' => $m['_id'],
+                'host' => $m['host'],
+                'port' => $m['port'],
+                'status' => empty($m['success']) ? false : true
+            );
+        }
+        if (empty($saveData['members'])) {
+            return false;
+        }
+        if (empty($id)) {
+            $this->create();
+        } else {
+            $saveData['_id'] = $id;
+        } 
+        return $this->save($saveData);
+    }
+
+    public function saveMultiReplset($rses) {
+        if (empty($rses)) {
+            return false;
+        }
+        foreach ($rses as $r) {
+            if (empty($r['data'])) {
+                continue;
+            }
+            $members = array();
+            foreach ($r['data'] as $m) {
+                $members[] = array(
+                    '_id' => $m['_id'], 
+                    'host' => $m['host'], 
+                    'port' => $m['port'],
+                    'status' => $m['success'],
+                );
+            }
+            $this->create();
+            $data = array(
+                'rs_name' => $r['rs_name'],
+                'members' => $members
+            );
+            $this->save($data);
+        }
     }
 }

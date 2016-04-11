@@ -1,6 +1,7 @@
 <?php
 class MongoReplSetController extends AppController {
-    public $components = array('RequestHandler');
+    public $components = array('RequestHandler', 'ScanMongoInstances');
+    public $uses = array('MongoReplSet');
     //public $uses = array('ReplSetModel')
 
 /**
@@ -11,89 +12,42 @@ class MongoReplSetController extends AppController {
 	public function index() {
         if ($this->request->is('post') && $this->request->data) {
             // code...
-            ini_set('max_execution_time', 30 * 60);
-            $data = $this->request->data['MongoReplSet'];
-            $rs_name = ''; //$data['rs_name'];
-            $from_ip = $data['from_host'];
-            $to_ip = $data['to_host'];
-            $port = $data['port'];
-
-//$us32str = sprintf("%u", $s32int);
-            $from_ip32_int = ip2long($from_ip);
-            $to_ip32_int = ip2long($to_ip);
-            $result = array();
-
+            ini_set('max_execution_time', 0);
             $start_time = microtime(true);
             CakeLog::info("San start time: $start_time");
-            $checked_members = array();
-            $result = array();
-            $errors = array(
-                //'success' => false,
-                //'code' => 'ERROR-INIT',
-                //'message' => 'Connect mongoDB failed.',
-                //'rs_name' => '',
-                //'data' => array(),
-            );
 
-            for ($i = $from_ip32_int; $i <= $to_ip32_int; $i++) {
-                // code...
-                $check_ip = long2ip($i);
-                if (isset($checked_members[$check_ip . ':' . $port])) {
-                    CakeLog::info("Scan skip $check_ip:$port for existed.");
-                    continue;
-                }
+            $rs_name = $this->request->data('MongoReplSet.rs_name');
+            $scanInLan = $this->request->data('MongoReplSet.scan_all_lan');
+            $port = $this->request->data('MongoReplSet.port');
 
-                $time1 = microtime(true);
-                if($this->MongoReplSet->pingServer($check_ip) && $this->MongoReplSet->pingServerPort($check_ip, $port)) {
-                    $check_member = array(
-                        array(
-                            'host' => $check_ip,
-                            'port' => $port,
-                        )
-                    );
-                    $check_status = $this->MongoReplSet->checkReplSetConn($rs_name, $check_member);
-                    CakeLog::info("San host[$check_ip], port[$port] status:" . json_encode($check_status));
-                    if (empty($check_status['success']) && $check_status['code'] == 'ERROR-NO-RUNNING-WITH-REPLSET') {
-                        continue;
-                    }
-                    foreach ($check_status['data'] as $member) {
-                        $checked_members[$member['check_name']] = 1;
-                    }
-                    if ($check_status['success']) {
-                        $result[] = $check_status;
-                    } else {
-                        $rs_name = emtpy($check_status['rs_name']) ? 'No replset name' : $check_status['rs_name'];
-                        if (empty($errors[$rs_name]['init_replset'])) {
-                            $check_status['data'] = array_merge($errors[$rs_name]['data'], $check_status['data']);
-                            $errors[$rs_name] = array_merge($errors[$rs_name], $check_status);
-                        } else {
-                            $errors[$rs_name]['data'] = array_merge($errors[$rs_name]['data'], $check_status['data']);
-                        }
-                    }
+            if ($scanInLan) {
+                $status = $this->_scanAllLan($port, $rs_name);
+            } else {
+                $range = array();
+                $range['from'] = $this->request->data('MongoReplSet.from_host');
+                $range['to'] = $this->request->data('MongoReplSet.to_host');
+
+                if ($range['from'] > $range['to']) {
+                    $this->renderJsonWithError('From ip address is larger than to-ip address.');
                 }
-                $time2 = microtime(true);
-                CakeLog::info("San host[$check_ip], port[$port] offset: " . ($time2 - $time1));
+                list($fAIp, $fBIp) = explode('.', $range['from']);
+                list($tAIp, $tBIp) = explode('.', $range['to']);
+                if ($fAIp < $tAIp || $fBIp < $tBIp) {
+                    $this->renderJsonWithError('IP range is too huge.');
+                }
+                $status = $this->_scanMultiRequest($range, $port, $rs_name);
             }
-            $this->_saveRsMembers($result);
-            $this->_saveRsMembers($errors);
-            $end_time = microtime(true);
-            CakeLog::info("Scan end, scan total num:[" . ($to_ip32_int - $from_ip32_int) . "] time:[$end_time], offset:" . ($end_time - $start_time));
-            CakeLog::info("Scan end, scan result: " . json_encode($result));
-            CakeLog::info("Scan end, scan checked members:" . json_encode($checked_members));
-            CakeLog::info("Scan end, scan errors members:" . json_encode($errors));
-            //$this->MongoReplSet->create();
-            //$this->MongoReplSet->save(array(
-                //'rs_name' => $rs_name,
-                //'members' => $members
-            //));
 
-            $this->renderJsonWithSuccess($result);
-            //$this->render('scan');
+//$us32str = sprintf("%u", $s32int);
+
+            $end_time = microtime(true);
+            CakeLog::info("San multi request offset[".($end_time - $start_time)."] status:" . json_encode($status));
+
+            $this->renderJsonWithSuccess($status);
         } else {
             $list = $this->MongoReplSet->find('all');
             $rs_list = array();
             if (!empty($list)) {
-                // code...
                 foreach($list as $rs) {
                     $rs_db = $rs['MongoReplSet'];
                     $rs_status = $this->MongoReplSet->checkReplSetConn($rs_db['rs_name'], $rs_db["members"]);
@@ -107,21 +61,104 @@ class MongoReplSetController extends AppController {
             $this->set('rs_list', $rs_list);
         }
 	}
+    private function _scanAllLAN($port, $rs_name) {
+        $status = array();
+        $client_ip = $this->request->clientIp();
+        list($a_ip, $b_ip) = explode('.', $client_ip);
 
-    private function _saveRsMembers($rses) {
-        foreach ($rses as $r) {
-            $members = array();
-            foreach ($r['data'] as $m) {
-                $members[] = array('host' => $m['host'], 'port' => $m['port']);
-            }
-            $this->MongoReplSet->create();
-            $data = array(
-                'rs_name' => $r['rs_name'],
-                'members' => $members
-            );
-            $this->MongoReplSet->save($data);
+        $hosts = array(
+            //array(
+            //'from' => '10.0.0.0',
+            //'to' => '10.255.255.255',
+            //),
+            //array(
+            //'from' => '172.16.0.0',
+            //'to' => '172.31.255.255',
+            //),
+            //array(
+                //'from' => '192.168.0.0',
+                //'to' => '192.168.255.255',
+            //),
+            array(
+            'from' => "$a_ip.$b_ip.0.0",
+            'to' => "$a_ip.$b_ip.255.255",
+            ),
+        );
+        CakeLog::info('_scanAllLAN:' . json_encode($hosts) . ', rs_name:' . $rs_name . ', port:' . $port);
+        foreach ($hosts as $range) {
+            $status[] = $this->_scanMultiRequest($range, $port, $rs_name);
         }
+        return $status;
     }
+
+    private function _scanMultiRequest($range, $port, $rs_name) {
+        if (empty($range) || empty($range['from']) || empty($range['to'])) {
+            return false;
+        }
+
+        $mh = curl_multi_init();
+        $curl = $data = array();
+
+        $from_ip32_int = ip2long($range['from']);
+        $to_ip32_int = ip2long($range['to']);
+        if (($from_ip32_int === false) || ($to_ip32_int === false)) {
+            return false;
+        }
+
+        $offset_int = ceil(($to_ip32_int - $from_ip32_int) / 50);
+        $offset_int = $offset_int > 16 ? $offset_int : 16;
+
+        for ($i = $from_ip32_int; $i <= $to_ip32_int; $i++) {
+            $from_ip = long2ip($i);
+            $i += $offset_int;//255 * 1;
+            $end_ip = $i > $to_ip32_int ? long2ip($to_ip32_int) : long2ip($i);
+
+            $url = Router::url(array(
+                'controller' => 'mongo_replset_scan',
+                'action' => 'index',
+                'from' => urlencode($from_ip),
+                'to' => urlencode($end_ip),
+                'port' => $port,
+                'rs_name' => $rs_name
+            ), true);
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            curl_setopt($ch, CURLOPT_HEADER, 0);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30 * 60);
+            curl_multi_add_handle($mh, $ch);
+            $curl[] = $ch;
+        }
+
+        $active = null;
+        $i = $j = $x = 0;
+        do {
+            $mrc = curl_multi_exec($mh, $active);
+            $i ++;
+        } while ($mrc == CURLM_CALL_MULTI_PERFORM);
+
+        while($active && $mrc == CURLM_OK) {
+            if (curl_multi_select($mh) == -1) {
+                $x ++;
+                //usleep(100);
+            }
+            do {
+                $j++;
+                $mrc = curl_multi_exec($mh, $active);
+            } while ($mrc == CURLM_CALL_MULTI_PERFORM);
+        }
+        
+        CakeLog::info('scan multiple count['.count($curl).'] offset_int:['.$offset_int.'], i:' . $i . ', j:' . $j . ', x:' . $x);
+        foreach ($curl as $c) {
+            $data[] = curl_multi_getcontent($c);
+            curl_multi_remove_handle($mh, $c);
+        }
+        curl_multi_close($mh);
+        return $data;
+    }
+
 
     public function delete($id) {
         $this->MongoReplSet->id = $id;
@@ -133,63 +170,147 @@ class MongoReplSetController extends AppController {
     
         $this->MongoReplSet->id = $id;
         $rs = $this->MongoReplSet->read();
-        $data = $rs['MongoReplSet'];
-        $status = $this->MongoReplSet->checkReplSetConn($data['rs_name'], $data['members']);
-        $status['id'] = $this->MongoReplSet->id;
+        $data = empty($rs['MongoReplSet']) ? array() : $rs['MongoReplSet'];
+        $status = array();
+        if (!empty($data)) {
+            $status = $this->MongoReplSet->checkReplSetConn($data['rs_name'], $data['members']);
+            $status['id'] = $this->MongoReplSet->id;
+        }
 
         $this->set('replset_status', $status);
         $this->render('/Elements/replset_panel');
     }
 
     public function add() {
-        $data = $this->request->data['MongoReplSet'];
-        $members = array(
-            array('host' => $data['host'], 'port' => $data['port'])
-        );
+        $rs_name = $this->request->data('MongoReplSet.rs_name') ? '' : $this->request->data('MongoReplSet.rs_name');
+        $members = $this->request->data('MongoReplSet.members');
 
-        $saveData = array(
-            'rs_name' => $data['rs_name'],
-            'members' => $members,
-        );
-
-        $this->MongoReplSet->create();
-        $this->MongoReplSet->save($saveData);
-        $status = $this->MongoReplSet->checkReplSetConn($data['rs_name'], $members);
-        $status['id'] = $this->MongoReplSet->id;
-
-        $this->set('replset_status', $status);
-        /*if ($status['success']) {
-            // code...
-            $this->renderJsonWithSuccess($status['data'], $status['message'], $status['code']);
-        } else {
-            $this->renderJsonWithError($status['message'], $status['code'], $status['data']);
-        }*/
-        
-        /*try{
-        
-            $conn = new MongoClient("mongodb://{$data['ip_address']}:{$data['port']}", array('replicaSet' => $data['rs_name']));
-            //$conn = new MongoClient("mongodb://{$data['ip_address']}:{$data['port']}");
-
-            //if (method_exists($conn, 'setSlaveOkay')) {
-                //$conn->setSlaveOkay(true);
-            //} else {
-                //$conn->setReadPreference(true ? MongoClient::RP_SECONDARY_PREFERRED : MongoClient::RP_PRIMARY);
-            //}
-            $db = $conn->selectDB("test");
-
-            $result = $db->execute("db.runCommand('ping')");
-            if($result['ok']){
-                $this->renderJsonWithSuccess($result['retval']);
-            }
-            $this->renderJsonWithError('Failed', 'ERROR', $result);
-
-        } catch(MongoConnectionException $e){
-            $this->renderJsonWithError($e->getMessage());
-        } catch(Exception $e) {
-            $this->renderJsonWithError($e->getMessage());
+        $success_arr = array();
+        $error_arr = array();
+        foreach ($members as $m) {
+            $this->ScanMongoInstances->checkEachMember($m['host'], $m['port'], $rs_name, $success_arr, $error_arr, $checked_arr, false);
         }
-        //$result = $source->getMongoDb()->execute("rs.status()");
-        $this->renderJsonWithSuccess($result);*/
+
+        $this->MongoReplSet->saveMultiReplset($success_arr);
+        $this->MongoReplSet->saveMultiReplset($error_arr);
+        $this->renderJsonWithSuccess();
+    }
+
+    private function _getHostPortForCmd($rs_name, $members){
+        $status = $this->MongoReplSet->checkReplSetConn($rs_name, $members);
+        CakeLog::info("_getHostPortForCmd status:" . json_encode($status));
+        if (empty($status) || empty($status['data'])) {
+            return false;
+        }
+        $host_port = '';
+        foreach ($status['data'] as $m) {
+            if ($m['success']) {
+                $host_port = $m['check_name'];
+                break;
+            } elseif($m['code'] == 'ERROR-NO-PRIMARY' || $m['code'] == 'ERROR-OTHERS') {
+                $host_port = $m['check_name'];
+                break;
+            }
+        }
+        CakeLog::info("_getHostPortForCmd hostport:" . $host_port);
+        return $host_port;
+    }
+
+    public function clear_data($id) {
+        $host = $this->request->data('MongoReplSet.host');
+        $port = $this->request->data('MongoReplSet.port');
+
+        $ch = curl_init();
+        $url = "http://$host/php_tests/api_clear_mongo_data.php?host=". urlencode($host) . "&port=$port";
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        $resp = curl_exec($ch);
+        $err = false;
+        if (curl_errno($ch)) {
+            $err = curl_error($ch);
+        }
+        curl_close($ch);
+        if ($err) {
+            $this->renderJsonWithError($err, 'ERROR-CURL');
+        }
+        $result = json_decode($resp, true);
+        if (empty($result)) {
+            $this->renderJsonWithError($resp, 'ERROR-JSON-EMPTY');
+        } elseif(empty($result['success'])) {
+            $result['message'] = empty($result['message']) ? 'Some error occur!' : $result['message'];
+            $result['code'] = empty($result['code']) ? 'ERROR-UNKNOWN' : $result['code'];
+            $this->renderJsonWithError($result['message'], $result['code'], $result);
+        }
+        
+        $this->renderJsonWithSuccess($result);
+
+    }
+
+    public function reconfig($id) {
+        if ($this->request->isPost() && $this->request->data) {
+            $this->MongoReplSet->id = $id;
+            $rs = $this->MongoReplSet->read();
+            $rs = $rs['MongoReplSet'];
+
+            $members = array();
+            $i = 0;
+            $existed_ids = array();
+            $max_i = 0;
+            foreach ($this->request->data('MongoReplSet.Members') as $key => $m) {
+                $max_i = max(intval($m['_id']), $max_i);
+            }
+            foreach ($this->request->data('MongoReplSet.Members') as $key => $m) {
+                $m_id = intval($m['_id']);
+                $members[$i]['_id'] = isset($existed_ids[$m_id]) ? ++$max_i : $m_id;
+                $members[$i]['host'] = $m['host'] . ':' . $m['port'];
+                $existed_ids[$m_id] = $members[$i]['_id'];
+                $i ++;
+            }
+
+            if ($this->request->data('MongoReplSet.force')) {
+                $command_line = 'var conf = rs.conf(); conf.members=' . json_encode($members) . ';rs.reconfig(conf, {force: true});';
+                CakeLog::info("reconfig command line forced:" . $command_line);
+                $host_port = $this->_getHostPortForCmd($rs['rs_name'], $rs['members']);
+                if (empty($host_port)) {
+                    $host_port = $this->_getHostPortForCmd($rs['rs_name'], $this->request->data('MongoReplSet.Members'));
+                }
+                if (empty($host_port)) {
+                    $this->renderJsonWithError('Not found valid mongo replset member.', 'ERROR-NO-VALID-MEMBER');
+                }
+                list($host, $port) = explode(':', $host_port);
+                $resp = $this->MongoReplSet->callWindowsMongoCmd($host, $port, $command_line, true);
+                if (empty($resp['ok'])) {
+                    $this->renderJsonWithError($resp['errmsg'], $resp['code'], $resp);
+                }
+                sleep(15);
+
+            } else {
+                $command_line = 'var conf = rs.conf(); conf.members=' . json_encode($members) . ';rs.reconfig(conf);';
+                CakeLog::info("reconfig command line:" . $command_line);
+                try{
+                    $status = $this->MongoReplSet->connectRs($rs['rs_name'], $rs['members'], false);
+                    if (empty($status['success'])) {
+                        $this->renderJsonWithError($status['message'], $status['code'], $status['data']);
+                    }
+                    $resp = $this->MongoReplSet->getConnection()->execute($command_line);
+                    if (empty($resp['ok'])) {
+                        $this->renderJsonWithError($resp['errmsg'], 'ERROR-RECONFIG', $resp);
+                    }
+                } catch(Exception $e) {
+                    $this->renderJsonWithError($e->getMessage(), 'EXCEPTION-reconfig');
+                }
+            }
+            $rs['data'] = $this->request->data('MongoReplSet.Members');
+            CakeLog::info("saveOrUpdateReplset rs:" . json_encode($rs));
+            $this->MongoReplSet->saveOrUpdateReplset($rs);
+            $this->renderJsonWithSuccess($resp);
+
+        }
+        $this->MongoReplSet->id = $id;
+        $rs = $this->MongoReplSet->read();
+        $this->set('replset', $rs);
 
     }
 

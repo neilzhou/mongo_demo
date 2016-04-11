@@ -18,7 +18,7 @@ echo $this->Form->create('MongoReplSet', array(
     ),
     'class' => 'form-horizontal ajax-form',
     'data-target' => '.rs-panel-group',
-    'data-replace' => 'false',
+    'data-type' => 'json',
     'data-after' => 'callback_after_add_replset',
     'type' => 'post',
     'url' => array(
@@ -27,35 +27,55 @@ echo $this->Form->create('MongoReplSet', array(
     )
 ));
 ?>
-<?php echo $this->Form->input('rs_name', array(
+<?php 
+/*echo $this->Form->input('rs_name', array(
     'label' => array(
         'text' => 'Name:'
     ),
     //'placeholder' => 'Replica Set Name'
     'placeholder' => 'rs0',
     'value' => 'rs0'
-));
+));*/
 ?>
 <legend>Members:</legend>
-<?php echo $this->Form->input('MongoReplSet.host', array(
-    'label' => array(
-        'text' => 'IP Address:'
-    ),
-    //'placeholder' => 'IP Address'
-    'placeholder' => '127.0.0.1',
-    'value' => '127.0.0.1'
-));
-?>
-<?php echo $this->Form->input('MongoReplSet.port', array(
-    'label' => array(
-        'text' => 'Port:'
-    ),
-    //'placeholder' => 'Port'
-    'placeholder' => '27017',
-    'value' => '27017'
-));
-?>
-<hr class="col col-md-8 col-md-offset-3">
+<div id="sheepItForm">
+    <div id="sheepItForm_template">
+<?php 
+echo $this->Form->input('MongoReplSet.host', array(
+        'label' => array(
+            'text' => 'IP Address:',
+        ),
+        'name' => 'MongoReplSet[members][#index#][host]',
+        //'placeholder' => 'IP Address'
+        'placeholder' => '127.0.0.1',
+        'value' => '127.0.0.1'
+    ));
+    ?>
+<?php 
+echo $this->Form->input('MongoReplSet.port', array(
+        'label' => array(
+            'text' => 'Port:'
+        ),
+        //'placeholder' => 'Port'
+        'name' => 'MongoReplSet[members][#index#][port]',
+        'placeholder' => '27017',
+        'value' => '27017'
+    ));
+    ?>
+    <div class="form-group">
+        <div class="col col-md-9 col-md-offset-3">
+            <a id="sheepItForm_add" href="javascript:void(0);">Add Member</a>
+            <a id="sheepItForm_remove_current" href="javascript:void(0);" style="color:red;">
+<!-- <span class="glyphicon glyphicon-remove" aria-hidden="true"> </span> --> 
+<!-- <span class="glyphicon-class">Remove</span> -->
+Remove
+</a>
+        </div>
+    </div>
+    <hr class="col col-md-8 col-md-offset-3">
+    </div>
+    <div id="sheepItForm_noforms_template">No Found.</div>
+</div>
 <?php
 echo $this->Form->end();
 ?>
@@ -64,6 +84,6 @@ echo $this->Form->end();
         <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
         <button type="button" class="btn btn-primary saveReplSetChanges">Save changes</button>
       </div>
-    </div><!-- /.modal-content -->
-  </div><!-- /.modal-dialog -->
+    </div>
+  </div>
 </div>

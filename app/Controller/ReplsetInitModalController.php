@@ -26,10 +26,12 @@ class ReplsetInitModalController extends AppController {
 
         $command_line = 'var conf = ' . json_encode($members) . ';rs.initiate(conf);';
 
-        $resp = $this->MongoReplSet->callWindowsMongoCmd($host, $port, $command_line);
-        if (strpos($resp, '"ok" : 1') !== false){
+        $resp = $this->MongoReplSet->callWindowsMongoCmd($host, $port, $command_line, true);
+        if (isset($resp['ok']) && $resp['ok']){
             $this->renderJsonWithSuccess(array(), "Initialize replica set configuration successfully!");
         }
-        $this->renderJsonWithError("Failed to initiate replica set configuration.", 'ERROR-CALL-INITIATE', array($resp));
+        if(is_string($resp)) $error = $resp;
+        else $error = $resp['errmsg'];
+        $this->renderJsonWithError($error, 'ERROR-CALL-INITIATE', $resp);
     }
 }

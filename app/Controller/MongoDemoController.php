@@ -42,6 +42,7 @@ class MongoDemoController extends AppController {
 
                 CakeLog::info('demo index rs db:' . json_encode($rs_db));
                 CakeLog::info('demo index rs status:' . json_encode($rs_status));
+                $this->MongoReplSet->saveOrUpdateReplset($rs_status);
                 $rs_list[] = $rs_status;
             }
         }
