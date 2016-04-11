@@ -61,9 +61,10 @@ class MongoReplSetController extends AppController {
             $this->set('rs_list', $rs_list);
         }
 	}
-    private function _scanAllLAN($port, $rs_name) {
+    private function _scanAllLan($port, $rs_name) {
         $status = array();
         $client_ip = $this->request->clientIp();
+        if(empty($client_ip) || strpos($client_ip, '.') === false) $client_ip = '127.0.0.1';
         list($a_ip, $b_ip) = explode('.', $client_ip);
 
         $hosts = array(
