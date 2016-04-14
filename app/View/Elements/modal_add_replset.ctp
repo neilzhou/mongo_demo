@@ -64,11 +64,13 @@ echo $this->Form->input('MongoReplSet.port', array(
     ?>
     <div class="form-group">
         <div class="col col-md-9 col-md-offset-3">
-            <a id="sheepItForm_add" href="javascript:void(0);">Add Member</a>
+            <a id="sheepItForm_add" href="javascript:void(0);">
+<span class="glyphicon glyphicon-plus" aria-hidden="true"> </span> 
+<span class="glyphicon-class">Add member</span>
+</a>
             <a id="sheepItForm_remove_current" href="javascript:void(0);" style="color:red;">
-<!-- <span class="glyphicon glyphicon-remove" aria-hidden="true"> </span> --> 
-<!-- <span class="glyphicon-class">Remove</span> -->
-Remove
+<span class="glyphicon glyphicon-remove" aria-hidden="true"> </span> 
+<span class="glyphicon-class">Remove</span>
 </a>
         </div>
     </div>
