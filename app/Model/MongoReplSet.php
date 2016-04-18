@@ -235,6 +235,8 @@ class MongoReplSet extends AppModel{
                 continue;
             }
             $mStatus = $this->mongoReplSetConnectStatus($m['host'], $m['port'], $rs_name);
+            CakeLog::info("foreach check status:" . json_encode($mStatus));
+            CakeLog::info("foreach check members:" . json_encode($checkedMembers));
             if ($status['success'] && $mStatus['success']) {
                 $conflictRs = true;
                 $status['code'] = 'ERROR-CONFLICT-REPLSET';
@@ -259,6 +261,9 @@ class MongoReplSet extends AppModel{
 
             $status['rs_name'] = empty($mStatus['rs_name']) ? $status['rs_name'] : $mStatus['rs_name'];
             foreach ($mStatus['data'] as $member) {
+                if (isset($checkedMembers[$member['check_name']])) {
+                    continue;
+                }
                 if ($conflictRs) {
                     $member['is_conflict'] = true;
                     $member['success'] = false;
