@@ -173,13 +173,11 @@ class MongoReplSetController extends AppController {
         $rs = $this->MongoReplSet->read();
         $data = empty($rs['MongoReplSet']) ? array() : $rs['MongoReplSet'];
         $status = array();
-        CakeLog::info("view data:" . json_encode($data));
         if (!empty($data)) {
             $status = $this->MongoReplSet->checkReplSetConn($data['rs_name'], $data['members']);
             $status['id'] = $this->MongoReplSet->id;
         }
 
-        CakeLog::info("view status:" . json_encode($status));
         $this->set('replset_status', $status);
         $this->render('/Elements/replset_panel');
     }
