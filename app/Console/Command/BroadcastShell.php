@@ -12,6 +12,7 @@
     {
         const PORT = 8888;
         const SLEEP_SEC = 5;
+        public $uses = array('TimingMongoInstance');
 
         function main()
         {
@@ -89,6 +90,16 @@
                 } else {
                     $message = "Listen broadcast, buf: $buf, remote ip: [$remote_ip], remote port: [$remote_port]";
                     CakeLog::info($message);
+
+                    $json = json_decode($buf, true);
+                    if (!$json) {
+                        CakeLog::info("Listen broadcast, decode json false.");
+                        continue;
+                    }
+
+                    $this->TimingMongoInstance->create();
+                    $id = $this->TimingMongoInstance->saveOrUpdate($json['ip'], $json['port']);
+                    CakeLog::info("Listen broadcast, saveOrUpdate TimingMongoInstance id: [$id]");
                     //echo "\n" . $message;
                 }
 

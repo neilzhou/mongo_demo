@@ -524,4 +524,57 @@ STR;
             $this->save($data);
         }
     }
+
+    public function saveRsMembers($rses) {
+        if (empty($rses)) {
+            return false;
+        }
+        foreach ($rses as $r) {
+            if (empty($r) || empty($r['data'])) {
+                return false;
+            }
+            $members = array();
+            foreach ($r['data'] as $m) {
+                $members[] = array(
+                    'host' => $m['host'], 
+                    'port' => $m['port'],
+                    '_id'  => $m['_id'],
+                    'status' => empty($m['success']) ? false : true
+                );
+            }
+
+            //$data = array(
+                //'rs_name' => $r['rs_name'],
+                //'members' => $members
+            //);
+            //$this->MongoReplSet->create();
+            //$this->MongoReplSet->save($data);
+            $dbSource = $this->getDataSource();
+            $collection = $dbSource->getMongoCollection($this);
+            CakeLog::info("members:" . json_encode($members));
+            $status = $collection->update(
+                array(
+                    'rs_name' => $r['rs_name'],
+                    'members' => array(
+                        '$elemMatch' => array(
+                            'host' => $members[0]['host'],
+                            'port' => $members[0]['port']
+                        )
+                    )
+                ), 
+                array(
+                    '$addToSet' => array(
+                        'members' => array(
+                            '$each' => $members
+                        )
+                    )
+                ), 
+                array(
+                    'multiple' => true, 
+                    'upsert' => true
+                )
+            );
+            CakeLog::info("update status:" . json_encode($status));
+        }
+    }
 }

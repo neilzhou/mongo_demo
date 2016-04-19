@@ -1,7 +1,7 @@
 <?php
 class MongoReplSetController extends AppController {
     public $components = array('RequestHandler', 'ScanMongoInstances');
-    public $uses = array('MongoReplSet');
+    public $uses = array('MongoReplSet', 'TimingMongoInstance');
     //public $uses = array('ReplSetModel')
 
 /**
@@ -62,34 +62,25 @@ class MongoReplSetController extends AppController {
         }
 	}
     private function _scanAllLan($port, $rs_name) {
-        $status = array();
-        $client_ip = $this->request->clientIp();
-        if(empty($client_ip) || strpos($client_ip, '.') === false) $client_ip = '127.0.0.1';
-        list($a_ip, $b_ip) = explode('.', $client_ip);
+        $success_members= array();
+        $checked_members = array();
+        $error_members = array();
 
-        $hosts = array(
-            //array(
-            //'from' => '10.0.0.0',
-            //'to' => '10.255.255.255',
-            //),
-            //array(
-            //'from' => '172.16.0.0',
-            //'to' => '172.31.255.255',
-            //),
-            //array(
-                //'from' => '192.168.0.0',
-                //'to' => '192.168.255.255',
-            //),
-            array(
-            'from' => "$a_ip.$b_ip.0.0",
-            'to' => "$a_ip.$b_ip.255.255",
-            ),
-        );
-        CakeLog::info('_scanAllLAN:' . json_encode($hosts) . ', rs_name:' . $rs_name . ', port:' . $port);
-        foreach ($hosts as $range) {
-            $status[] = $this->_scanMultiRequest($range, $port, $rs_name);
+        $list = $this->TimingMongoInstance->find('all');
+        foreach ($list as $item) {
+            list($host, $port) = current($item);
+            if (isset($checked_members[$host . ':'. $port])) {
+                continue;
+            }
+            if ($this->MongoReplSet->pingServer($host) && $this->MongoReplSet->pingServerPort($host, $port)) {
+                $this->ScanMongoInstances->checkEachMember($host, $port, '', $success_members, $error_members, $checked_members);
+            }
         }
-        return $status;
+
+        $this->MongoReplSet->saveRsMembers($success_members);
+        $this->MongoReplSet->saveRsMembers($error_members);
+
+        return $success_members;
     }
 
     private function _scanMultiRequest($range, $port, $rs_name) {
