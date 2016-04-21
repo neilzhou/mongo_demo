@@ -67,8 +67,11 @@ class MongoReplSetController extends AppController {
         $error_members = array();
 
         $list = $this->TimingMongoInstance->find('all');
+        if(empty($list)) return array();
         foreach ($list as $item) {
-            list($host, $port) = current($item);
+            $item = current($item);
+            $host = $item['host'];
+            $port = $item['port'];
             if (isset($checked_members[$host . ':'. $port])) {
                 continue;
             }

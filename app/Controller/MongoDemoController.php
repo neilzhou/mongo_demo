@@ -1,7 +1,7 @@
 <?php
 class MongoDemoController extends AppController {
 
-    public $uses = array('MongoReplSet');
+    public $uses = array('MongoReplSet', 'TimingMongoInstance');
 
 /**
  * Action for plugin documentation home page
@@ -46,7 +46,18 @@ class MongoDemoController extends AppController {
                 $rs_list[] = $rs_status;
             }
         }
+        $lan_hosts = $this->TimingMongoInstance->find('all');
+        $select_options = array();
+        if(!empty($lan_hosts)){
+        
+            foreach($lan_hosts as $h) {
+                $h = $h['TimingMongoInstance'];
+                $key = $h['ip'] . ':' . $h['port'];
+                $select_options[$key] = $key;
+            }
+        }
         $this->set('rs_list', $rs_list);
+        $this->set('select_options', $select_options);
 	}
 
 }

@@ -28,6 +28,29 @@ echo $this->Form->create('MongoReplSet', array(
     <label for="MongoReplSetRsName" class="col col-md-3 control-label">Replset Name:</label>
     <div class="col col-md-9 control-label" style="text-align: left;"><strong><em id="modal_member_rs_name"></em></strong></div>
 </div>
+<?php echo $this->Form->input('enable_selection', array(
+    'label' => array(
+        'text' => 'Select one member from Active Timing cluster',
+        'class' => null,
+    ),
+    'type' => 'checkbox',
+    'checked' => true,
+    'id' => 'enable_selection',
+    'wrapInput' => 'col col-md-9 col-md-offset-3',
+    'class' => false
+)); ?>
+<div class="select-member">
+<?php 
+echo $this->Form->input('MongoReplSet.select_host', array(
+    'label' => array(
+        'text' => 'Select one member:'
+    ),
+    'empty' => 'Please select...',
+    'options' => $select_options
+));
+?>
+</div>
+<div class="type-member" style="display: none;">
 <?php echo $this->Form->input('MongoReplSet.host', array(
     'label' => array(
         'text' => 'IP Address:'
@@ -46,6 +69,7 @@ echo $this->Form->create('MongoReplSet', array(
     'value' => '27017'
 ));
 ?>
+</div>
 <?php
 echo $this->Form->end();
 ?>

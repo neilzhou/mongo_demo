@@ -6,6 +6,16 @@ $(document).ready(function(){
 
     $('[data-toggle="tooltip"]').tooltip();
 
+    $('#enable_selection').on('change', function(e){
+        if($(this).is(":checked")) {
+            $('#addMemberModal .select-member').show();
+            $('#addMemberModal .type-member').hide();
+        } else {
+            $('#addMemberModal .select-member').hide();
+            $('#addMemberModal .type-member').show();
+        }
+    });
+
     $('body').on('click', 'button.clear-data', function(e){
         var $this = $(this);
         var $panel = $this.closest('.panel');

@@ -225,7 +225,7 @@ class MongodbSource extends DboSource {
 
 		} catch(MongoException $e) {
 			$this->error = $e->getMessage();
-			trigger_error($this->error);
+			//trigger_error($this->error);
 		}
 		return $this->connected;
 	}

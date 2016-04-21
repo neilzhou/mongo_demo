@@ -35,9 +35,10 @@
                 die($error);
             }
 
-            $local_ip = getHostByName(getHostName());
+            $host_name = getHostName();
+            $local_ip = getHostByName($host_name);
             while (true) {
-                $message = json_encode(array("ip" => $local_ip, "port" => 27017));
+                $message = json_encode(array('host' => $host_name, 'ip' => $local_ip, 'port' => 27017));
                 if (!socket_sendto($sock, $message, strlen($message), 0, $server, $port)) {
                     $errorcode = socket_last_error();
                     $errormsg = socket_strerror($errorcode);
@@ -98,7 +99,7 @@
                     }
 
                     $this->TimingMongoInstance->create();
-                    $id = $this->TimingMongoInstance->saveOrUpdate($json['ip'], $json['port']);
+                    $id = $this->TimingMongoInstance->saveOrUpdate($json['host'], $json['ip'], $json['port']);
                     CakeLog::info("Listen broadcast, saveOrUpdate TimingMongoInstance id: [$id]");
                     //echo "\n" . $message;
                 }

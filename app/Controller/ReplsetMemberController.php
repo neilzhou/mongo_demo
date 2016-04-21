@@ -9,7 +9,18 @@ class ReplsetMemberController extends AppController {
  * @return void
  */
 	public function add($id) {
-        $data = $this->request->data['MongoReplSet'];
+        $enable_selection = $this->request->data('MongoReplSet.enable_selection');
+        if($enable_selection) {
+            $host_port = $this->request->data('MongoReplSet.select_host');
+            $host_port_arr = explode(':', $host_port);
+
+            $data = array(
+                'host' => $host_port_arr[0],
+                'port' => empty($host_port_arr[1]) ? false : $host_port_arr[1],
+            );
+        } else {
+            $data = $this->request->data('MongoReplSet');
+        }
         if (empty($data) || empty($data['host']) || empty($data['port'])) {
             $this->renderJsonWithError("The request params is invalid.", 'ERROR-EMPTY-PARAMS', $data);
         }

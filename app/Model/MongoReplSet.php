@@ -529,16 +529,23 @@ STR;
         if (empty($rses)) {
             return false;
         }
+        //$timingModel = ClassRegistry::init('TimingMongoInstance');
         foreach ($rses as $r) {
             if (empty($r) || empty($r['data'])) {
                 return false;
             }
             $members = array();
             foreach ($r['data'] as $m) {
+                //$host = $timingModel->field('host', array(
+                    //'ip' => $m['host'],
+                    //'port' => $m['port']
+                //));
+                $host = gethostbyaddr($m['host']);
                 $members[] = array(
                     'host' => $m['host'], 
                     'port' => $m['port'],
                     '_id'  => $m['_id'],
+                    'pc_host'  => $host,
                     'status' => empty($m['success']) ? false : true
                 );
             }
