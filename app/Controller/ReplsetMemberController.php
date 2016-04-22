@@ -70,6 +70,7 @@ class ReplsetMemberController extends AppController {
                 $new_member = array(
                     'host' => $data['host'], 
                     'port' => $data['port'], 
+                    'pc_host' => gethostbyaddr($data['host']),
                     '_id' => $max_i,
                     'status' => true
                 );

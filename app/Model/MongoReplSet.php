@@ -59,6 +59,7 @@ class MongoReplSet extends AppModel{
                 ),
             );
             $this->_conn = new MongodbSource($conf, true);
+
             if ($this->_conn->connected) {
                 // code...
                 if ($check_status) {
@@ -480,11 +481,25 @@ STR;
         $saveData = array(
             'rs_name' => $data['rs_name']
         );
+        $hosts = array();
+        if(! empty($id)) {
+            $this->id = $id;
+            $exists = $this->read();
+            $members = $exists[$this->alias]['members'];
+            foreach($members as $m) {
+                $hosts[$m['host'] . ':' . $m['port']] = empty($m['pc_host']) ? '' : $m['pc_host'];
+            }
+        }
         foreach ($data['data'] as $m) {
+            $pc_host = empty($hosts[$m['host'] . ':' . $m['port']]) ? '' : $hosts[$m['host'] . ':' . $m['port']];
+            if(empty($pc_host)) {
+                $pc_host = gethostbyaddr($m['host']);
+            }
             $saveData['members'][] = array(
                 '_id' => $m['_id'],
                 'host' => $m['host'],
                 'port' => $m['port'],
+                'pc_host' => $pc_host,
                 'status' => empty($m['success']) ? false : true
             );
         }
@@ -513,6 +528,7 @@ STR;
                     '_id' => $m['_id'], 
                     'host' => $m['host'], 
                     'port' => $m['port'],
+                    'pc_host' => gethostbyaddr($m['host']),
                     'status' => $m['success'],
                 );
             }

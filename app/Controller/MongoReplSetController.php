@@ -305,6 +305,12 @@ class MongoReplSetController extends AppController {
         }
         $this->MongoReplSet->id = $id;
         $rs = $this->MongoReplSet->read();
+
+        foreach($rs['MongoReplSet']['members'] as $key => $m) {
+            $instance = $this->TimingMongoInstance->findByHost($m['pc_host']);
+            if(!empty($instance) && ($instance['TimingMongoInstance']['ip'] != $m['host'] || $instance['TimingMongoInstance']['port'] != $m['port']))
+                $rs['MongoReplSet']['members'][$key] = array_merge($m, array('changed_ip' => $instance['TimingMongoInstance']['ip'], 'changed_port' => $instance['TimingMongoInstance']['port']));
+        }
         $this->set('replset', $rs);
 
     }

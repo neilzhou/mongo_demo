@@ -27,15 +27,24 @@ echo $this->Form->create('MongoReplSet', array(
 </div>
 <legend>Members:</legend>
 <?php 
+$is_force = false;
 foreach ($replset['MongoReplSet']['members'] as $key=>$member) :
+
+    $changed_ip = empty($member['changed_ip']) ? '' : $member['changed_ip'];
+    $changed_port = empty($member['changed_port']) ? '' : $member['changed_port'];
+    $is_changed = $changed_ip;
+    $is_force = $is_force ? $is_force : $is_changed;
 echo $this->Form->hidden("MongoReplSet.Members.$key._id", array('value' => empty($member['_id']) ? 0 : $member['_id']));
+    if($is_changed) echo "<p class='text-center text-warning'>The mongo instance has been changed from {$member['host']}:{$member['port']} to $changed_ip:$changed_port</p>";
+
 echo $this->Form->input("MongoReplSet.Members.$key.host", array(
     'label' => array(
         'text' => 'IP Address:'
     ),
+    'div' => $is_changed ? 'form-group has-warning' : 'form-group',
     //'placeholder' => 'IP Address'
     'placeholder' => '127.0.0.1',
-    'value' => $member['host']
+    'value' => $is_changed ? $changed_ip : $member['host']
 ));
 ?>
 <?php echo $this->Form->input("MongoReplSet.Members.$key.port", array(
@@ -43,8 +52,9 @@ echo $this->Form->input("MongoReplSet.Members.$key.host", array(
         'text' => 'Port:'
     ),
     //'placeholder' => 'Port'
+    'div' => $is_changed ? 'form-group has-warning' : 'form-group',
     'placeholder' => '27017',
-    'value' => $member['port']
+    'value' => $is_changed ? $changed_port : $member['port']
 ));
 ?>
 <hr class="col col-md-8 col-md-offset-3">
@@ -59,6 +69,7 @@ endforeach;
             'type' => 'checkbox',
             'wrapInput' => 'col col-md-9 col-md-offset-3',
             'afterInput' => '<span class="help-block"><small>The force option forces a new configuration onto the member. Use this procedure only to recover from catastrophic interruptions.</small></span>',
+            'checked' => $is_force,
 			'class' => false
 		)); ?>
 <?php
