@@ -11,27 +11,6 @@ class MongoDemoController extends AppController {
 	public function index() {
         $list = $this->MongoReplSet->find('all');
         $rs_list = array();
-        $time1 = microtime(true);
-            //App::uses('MongodbSource', 'Mongodb.Model/Datasource');
-            //$conf = array(
-                //'database' => 'test',
-                //'replicaset' => array(
-                    //'host' => 'mongodb://10.107.122.183:27017, 10.107.122.184:27017', 
-                    //'options' => array('replicaSet' => 'rs0')
-                //),
-            //);
-            //new MongodbSource($conf, true);
-        /*try{
-
-        $m = new MongoClient("mongodb://10.107.122.184:27017, 10.107.122.183:27017", array("replicaSet" => "rs0", 'connect'=>true, 'connectTimeoutMS'=>'5000'));
-        $db = $m->selectDB('test');
-        $result = $db->execute('rs.status()');
-        } catch(Exception $e){
-        
-            $result = array($e->getMessage());
-        }*/
-            $time2 = microtime(true);
-            //CakeLog::info("test offset:" . ($time2 - $time1) . ", result:" . json_encode($result));
 
         if (!empty($list)) {
             // code...
@@ -52,8 +31,12 @@ class MongoDemoController extends AppController {
         
             foreach($lan_hosts as $h) {
                 $h = $h['TimingMongoInstance'];
-                $key = $h['ip'] . ':' . $h['port'];
-                $select_options[$key] = $key;
+                //$status = $this->MongoReplSet->mongoReplSetConnectStatus($h['ip'], $h['port']);
+                //if((!$status['success']) && $status['init_replset']) {
+                
+                    $key = $h['ip'] . ':' . $h['port'];
+                    $select_options[$key] = $key;
+                //}
             }
         }
         $this->set('rs_list', $rs_list);
