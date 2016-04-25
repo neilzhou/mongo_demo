@@ -38,6 +38,7 @@ class MongoReplSet extends AppModel{
             if(empty($pc_host)) {
                 $pc_host = gethostbyaddr($m['host']);
             }
+            CakeLog::info("saveOrupdateReplset pc_host:[$pc_host]");
             $saveData['members'][] = array(
                 '_id' => $m['_id'],
                 'host' => $m['host'],

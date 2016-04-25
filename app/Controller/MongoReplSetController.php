@@ -312,12 +312,19 @@ class MongoReplSetController extends AppController {
         $this->MongoReplSet->id = $id;
         $rs = $this->MongoReplSet->read();
 
+        $manager = new MongoReplsetConnection($rs['MongoReplSet']['rs_name'], $rs['MongoReplSet']['members']);
+        $status = $manager->connect(true);
+        CakeLog::info("reconfig connect status:" . json_encode($status));
+
         foreach($rs['MongoReplSet']['members'] as $key => $m) {
             $instance = $this->TimingMongoInstance->findByHost($m['pc_host']);
+            CakeLog::info("TimingMongoInstance, found:" . json_encode($instance));
+            CakeLog::info("TimingMongoInstance, check member:" . json_encode($m));
             if(!empty($instance) && ($instance['TimingMongoInstance']['ip'] != $m['host'] || $instance['TimingMongoInstance']['port'] != $m['port']))
                 $rs['MongoReplSet']['members'][$key] = array_merge($m, array('changed_ip' => $instance['TimingMongoInstance']['ip'], 'changed_port' => $instance['TimingMongoInstance']['port']));
         }
         $this->set('replset', $rs);
+        $this->set('replset_status', $status['success']);
 
     }
 

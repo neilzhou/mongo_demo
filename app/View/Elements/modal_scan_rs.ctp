@@ -26,19 +26,15 @@ echo $this->Form->create('MongoReplSet', array(
 ?>
 
 <?php 
-$client_ip = $this->request->clientIp();
-if(empty($client_ip) || strpos($client_ip, '.') === false) $client_ip = '127.0.0.1';
-list($a_ip, $b_ip) = explode('.', $client_ip);
-$range_ip_start = "$a_ip.$b_ip.0.0";
-$range_ip_end = "$a_ip.$b_ip.255.255";
 echo $this->Form->input('scan_all_lan', array(
     'label' => array(
         'text' => 'Scan computers in LAN',
         'class' => null,
     ),
             'type' => 'checkbox',
+            'checked' => true,
             'wrapInput' => 'col col-md-9 col-md-offset-3',
-            'afterInput' => '<span class="help-block"><small>The option will scan computers operation in LAN('.$range_ip_start. ' - ' . $range_ip_end. '), which operation will cost some minutes. Use this procedure only when you don\'t know computer\'s IP address. </small></span>',
+            'afterInput' => '<span class="help-block"><small>The option will scan the computers which the ActiveTiming program has been installed on in LAN.</small></span>',
             'id' => 'MongoReplSetScanLan',
 			'class' => false
 		)); ?>
@@ -59,6 +55,7 @@ echo $this->Form->input('scan_all_lan', array(
     //'placeholder' => 'IP Address'
     'placeholder' => '127.0.0.1',
     'id' => 'ScanFromHost',
+    'disabled' => true,
     'value' => '10.107.122.180'
 ));
 ?>
@@ -69,6 +66,7 @@ echo $this->Form->input('scan_all_lan', array(
     //'placeholder' => 'IP Address'
     'placeholder' => '127.0.0.1',
     'id' => 'ScanToHost',
+    'disabled' => true,
     'value' => '10.107.122.186'
 ));
 ?>

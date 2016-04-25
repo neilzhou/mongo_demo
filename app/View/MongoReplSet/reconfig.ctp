@@ -33,7 +33,7 @@ foreach ($replset['MongoReplSet']['members'] as $key=>$member) :
     $changed_ip = empty($member['changed_ip']) ? '' : $member['changed_ip'];
     $changed_port = empty($member['changed_port']) ? '' : $member['changed_port'];
     $is_changed = $changed_ip;
-    $is_force = $is_force ? $is_force : $is_changed;
+    $is_force = !$replset_status;//$is_force ? $is_force : $is_changed;
 echo $this->Form->hidden("MongoReplSet.Members.$key._id", array('value' => empty($member['_id']) ? 0 : $member['_id']));
     if($is_changed) echo "<p class='text-center text-warning'>The mongo instance has been changed from {$member['host']}:{$member['port']} to $changed_ip:$changed_port</p>";
 

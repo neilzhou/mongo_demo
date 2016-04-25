@@ -9,7 +9,7 @@ class MongoReplsetConnection {
         $this->members = $members;
     }
 
-    public function connect($check_status) {
+    public function connect($check_status = false) {
     
         $rs_name = $this->rs_name;
         $members = $this->members;
