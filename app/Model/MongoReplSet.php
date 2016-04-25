@@ -25,116 +25,10 @@ class MongoReplSet extends AppModel{
      * @author Neil.zhou
      **/
     public function connectRs($rs_name, $members, $check_status = true){
-
-        $this->_conn = false;
-        $result = array(
-            'success' => false,
-            'message' => 'Connect mongo failed.',
-            'data' => array(),
-            'code' => 'ERROR-INIT'
-        );
-        if(empty($rs_name) || empty($members)) {
-            $result['code'] = 'ERROR-EMPTY-NAME-MEMBERS';
-        }
-
-        $members_str = array();
-        foreach($members as $m) {
-            if (empty($m['status'])) {
-                //continue;
-            }
-            $members_str[] = $m['host'] . ':' . $m['port'];
-        }
-        if (empty($members_str)) {
-            $result['message'] = 'No candidate servers found';
-            $result['code'] = 'ERROR-EMPTY-VALID-MEMBER';
-            return $result;
-        }
-        try {
-            App::uses('MongodbSource', 'Mongodb.Model/Datasource');
-            $conf = array(
-                'database' => 'test',
-                'replicaset' => array(
-                    'host' => 'mongodb://' . implode(',', $members_str), 
-                    'options' => array('replicaSet' => $rs_name)
-                ),
-            );
-            $this->_conn = new MongodbSource($conf, true);
-
-            if ($this->_conn->connected) {
-                // code...
-                if ($check_status) {
-                    $result = $this->getRsStatus($this->_conn, $rs_name, $members);
-                } else {
-                    $result['success'] = true;
-                    $result['message'] = "OK!";
-                    $result['code'] = 'SUCCESS';
-                }
-            } else {
-                $result['message'] = $this->_conn->error;
-                $result['code'] = 'ERROR-CONNECT-FAILED';
-            }
-        } catch(MongoConnetionException $e){
-
-            $result['message'] = $e->getMessage();
-            $result['code'] = 'ERROR-MongoConnetionException';
-        } catch(MongoException $e){
-            $result['message'] = $e->getMessage();
-            $result['code'] = 'ERROR-MongoException';
-        } catch (Exception $e) {
-            $result['message'] = $e->getMessage();
-            $result['code'] = 'ERROR-Exception';
-        }
-        return $result;
-    }
-
-    public function getRsStatus($conn, $rs_name, $members) {
-        $result = array(
-            'success' => false,
-            'message' => 'Connect mongo failed.',
-            'data' => array(),
-            'code' => 'ERROR-INIT'
-        );
-        $rsStatus = $conn->execute("rs.status()");
-        $rsMembers = array();
-        if(!empty($rsStatus) || !isset($rsStatus['ok'])){
-            $result['success'] = true;
-            $result['message'] = "OK!";
-            $result['code'] = 'SUCCESS';
-
-            foreach ($rsStatus['members'] as $m) {
-                $rsMembers[$m['name']] = $m['stateStr'];
-                list($host, $port) = explode(':', $m['name']);
-                $result['data'][$m['name']] = array(
-                    'host' => $host,
-                    'port' => $port,
-                    'check_name' => $m['name'],
-                    'rs_status' => $m['stateStr'],
-                    'conn_status' => 'Success',
-                    'success' => ($m['health']) ? true : false,
-                    'message' => $m['stateStr']
-                );
-            }
-
-            foreach ($members as $m) {
-                $check = $m['host'] . ':' . $m['port'];
-                if (isset($result['data'][$check])) {
-                    continue;
-                }
-                $success = false;
-                $result['data'][$check] = array(
-                    'host' => $m['host'],
-                    'port' => $m['port'],
-                    'check_name' => $check,
-                    'rs_status' => (isset($rsMembers[$check]) ? $rsMembers[$check] : 'Unknow'),
-                    'conn_status' => $success ? 'Success' : 'Failed',
-                    'success' => $success,
-                    'message' => empty($rsMembers[$check]) ? 'Not a replica set member' : $rsMembers[$check]
-                );
-            }
-        } else {
-            $result['data'] = $rsStatus; 
-            $result['code'] = 'ERROR-ISMASTER-FAILED';
-        }
+        App::uses('MongoReplsetConnection', 'Lib');
+        $connection = new MongoReplsetConnection($rs_name, $members);
+        $result = $connection->connect($check_status);
+        $this->_conn = $connection->getConnection();
         return $result;
     }
 
@@ -143,46 +37,6 @@ class MongoReplSet extends AppModel{
     }
     public function formatSql($format, $args) {
         return sprintf($format, addslashes($args));
-    }
-
-    /**
-     * checkMongoConnection
-     * @return void
-     * @author Neil.zhou
-     **/
-    public function checkReplSetConnOld($rs_name, $members)
-    {
-        $time1 = microtime(true);
-        $status = $this->connectRs($rs_name, $members);
-        $time2 = microtime(true);
-        CakeLog::info("checkReplSetConn connectRS rsname[$rs_name] offset:" . ($time2 - $time1));
-        $failedCodes = [
-            'ERROR-CALL-WIN-MONGO-CMD',
-            'ERROR-CONNECTION-FAILED',
-        ];
-        if (!$status['success']) {
-            // code...
-            $initReplSet = false;
-            foreach($members as $m) {
-                $mStatus = $this->mongoReplSetConnectStatus($m['host'], $m['port'], $rs_name);
-                if ($mStatus['code'] == 'ERROR-NO-REPLSET-CONFIG') {
-                    $initReplSet = true;
-                }
-                $connStatus = in_array($mStatus['code'], $failedCodes) ? 'Failed' : 'Success';
-                $mStatus['host'] = $m['host'];
-                $mStatus['port'] = $m['port'];
-                $mStatus['check_name'] = $m['host'] . ':' . $m['port'];
-                $mStatus['rs_status'] = 'Unkown';
-                $mStatus['conn_status'] = $connStatus;
-                $status['data'][$mStatus['check_name']] = $mStatus;
-            }
-            $status['init_replset'] = $initReplSet;
-        }
-
-        $status['rs_name'] = $rs_name;
-        $time3 = microtime(true);
-        CakeLog::info("checkReplSetConn rsname[$rs_name] offset:" .($time3 - $time1). ", cmd check members offset:" . ($time3 - $time2));
-        return $status;
     }
 
     /**
@@ -210,230 +64,36 @@ class MongoReplSet extends AppModel{
      */
     public function checkReplSetConn($rs_name, $members)
     {
-        $time1 = microtime(true);
-        $rs_name = empty($rs_name) ? '' : $rs_name;
-        $status = array(
-            'success' => false,
-            'code'    => 'ERROR-init',
-            'message' => 'Connect MongoDB failed.',
-            'rs_name' => $rs_name,
-            'init_replset' => false,
-            'data' => array()
-        );
-        if (empty($members)) {
-            return $status;
-        }
-
-        // if  some members of the replica set are not config replica set and the replica set is not setup, then set it true. which notice end-user to initiate the replica set.
-        $initReplSet = false;
-        $checkedMembers = array();
-        // if one replica set has two primary member, means conflict in one replica set. which is caused by manually adding another replica set members.
-        $conflictRs = false; 
-
-        foreach($members as $m) {
-            $check_name = $m['host'] . ":" . $m['port'];
-            if (isset($checkedMembers[$check_name])) {
-                continue;
-            }
-            $mStatus = $this->mongoReplSetConnectStatus($m['host'], $m['port'], $rs_name);
-            if ($status['success'] && $mStatus['success']) {
-                $conflictRs = true;
-                $status['code'] = 'ERROR-CONFLICT-REPLSET';
-            } else {
-                $conflictRs = false; // reset to false if current status is false.
-            }
-            if ($mStatus['success']) {
-                $status['success'] = true;
-                $status['code'] = $mStatus['code'];
-                $status['message'] = $mStatus['message'];
-            }
-            
-            // set error code and error message if replica set is not set up.
-            if ($mStatus['init_replset']) {
-                $status['init_replset'] = true;
-                $status['code'] = $mStatus['code'];
-                $status['message'] = $mStatus['message'];
-            } elseif (empty($status['success']) && empty($status['init_replset'])) {
-                $status['code'] = $mStatus['code'];
-                $status['message'] = $mStatus['message'];
-            }
-
-            $status['rs_name'] = empty($mStatus['rs_name']) ? $status['rs_name'] : $mStatus['rs_name'];
-            foreach ($mStatus['data'] as $member) {
-                if (isset($checkedMembers[$member['check_name']])) {
-                    continue;
-                }
-                if ($conflictRs) {
-                    $member['is_conflict'] = true;
-                    $member['success'] = false;
-                    $member['message'] = 'The replica set has two primary member, which is caused by adding another replica set member.';
-                }
-                $checkedMembers[$member['check_name']] = 1;
-                $status['data'][] = $member;
-            }
-        }
-        $time3 = microtime(true);
-        CakeLog::info("checkReplSetConn rsname[$rs_name] offset:" .($time3 - $time1). ", cmd check members offset:" . ($time3 - $time1));
-        return $status;
+        App::uses('MongoReplsetMonitor', 'Lib');
+        return MongoReplsetMonitor::getMembersStatus($rs_name, $members);
     }
     
 
     public function mongoReplSetConnectStatus($host, $port, $rs_name = 'rs0')
     {
-        $host_port_key = $host . ':' . $port;
-        $result = array(
-            'success' => false, 
-            'code' => 'ERROR-INIT-MONGO-COMMAND',
-            'rs_name' => $rs_name,
-            'init_replset' => false,
-            'message' => 'Connect mongoDB failed.',
-            'data' => array(
-                "$host_port_key" => array(
-                    '_id'  => 0, 
-                    'host' => $host, 
-                    'port' => $port, 
-                    'check_name' => $host . ':' . $port,
-                    'rs_status' => 'Unknown', 
-                    'code' => 'ERROR-INIT-MONGO-COMMAND',
-                    'conn_status' => 'Success',
-                    'success' => false,
-                    'is_conflict' => false,
-                    'message' => 'Connect mongoDB failed.'
-                )
-            ),
-        );
-        if (empty($host) || empty($port)) {
-            // code...
-            $result['code'] = 'ERROR-EMPTY-HOST-PORT';
-            return $result;
-        }
-
-        $status = $this->callWindowsMongoCmd($host, $port, 'rs.status()');
-        CakeLog::info("rs.status raw data:" . $status);
-        $result['detail'] = $status;
-        $parse_status = false;
-        if (empty($rs_name)) {
-            $rs_name = $this->getMongoReplsetName($host, $port);
-            $result['rs_name'] = $rs_name;
-        }
-        App::uses('MongoReplsetStatus', 'Lib');
-        $status_code = MongoReplsetStatus::statusCode($status, $rs_name);
-        $error_message = MongoReplsetStatus::getMessage($status_code, $result['rs_name']);
-        $parse_status = MongoReplsetStatus::canBeParse($status_code);
-        $result['success'] = MongoReplsetStatus::isSuccess($status_code);
-
-        $result['data'][$host_port_key]['message'] = $result['message'];
-
-        if ($parse_status) {
-            $resp = $this->parseMongoCmdResp($status);
-            if (!empty($resp) && isset($resp['members'])) {
-                $result['data'] = array(); // reset to empty array.
-                foreach ($resp['members'] as $m) {
-                    list($host, $port) = explode(':', $m['name']);
-                    $result['data'][$m['name']] = array(
-                        '_id' => $m['_id'],
-                        'host' => $host,
-                        'port' => $port,
-                        'check_name' => $m['name'],
-                        'code' => $result['code'],
-                        'rs_status' => $m['stateStr'],
-                        'conn_status' => 'Success',
-                        'success' => ($m['health'] === 1) ? true : false,
-                        'message' => $m['stateStr']
-                    );
-                }
-            } else if(!empty($resp)) {
-                isset($resp['stateStr']) && ($result['data'][$host_port_key]['rs_status'] = $resp['stateStr']);
-                $error_message && isset($resp['errmsg']) && ($error_message = $resp['errmsg']);
-                $result['data'][$host_port_key]['code'] = $result['code'];
-                $error_message && $result['data'][$host_port_key]['message'] = $error_message;
-                //CakeLog::info("error message hostportkey[$host_port_key]: ". $error_message);
-            } 
-        }
-        //CakeLog::info("check cmd rs.status hostport result:" . json_encode($result));
-        if(empty($error_message)) $error_message = $status;
-        $result['message'] = $error_message;
-        $result['code'] = $status_code;
-        $result['init_replset'] = MongoReplsetStatus::canBeInit($status_code);
-        //CakeLog::info("check result code:[$status_code], message:[$error_message]");
-        return $result;
+        App::uses('MongoReplsetMonitor', 'Lib');
+        return MongoReplsetMonitor::getStatus($host, $port, $rs_name);
     }
 
     public function getMongoReplsetName($host, $port) {
-        $resp = $this->callWindowsMongoCmd($host, $port, 'db.serverCmdLineOpts().parsed.replication');
-        if (empty($resp)) {
-            return false;
-        }
-        if (strpos($resp, '"replSetName"') === false) {
-            return false;
-        }
-        $arr = $this->parseMongoCmdResp($resp);
-        return empty($arr['replSetName']) ? false : $arr['replSetName'];
-    }
-
-    private function parseMongoCmdResp($resp) {
-        $result = array();
-        $resp = str_replace(array("\r\n", "\r", "\n", "\t"), '', $resp);
-        $resp = preg_replace(array(
-            '/ISODate\((.*?)\)/',
-            '/NumberLong\((.*?)\)/',
-            '/Timestamp\((\d+),.*?\)/', 
-            '/ISODate\((.*?)\)/', 
-        ), array('\1', '\1', '\1', '\1'), $resp);
-        if (preg_match("/{.*}/", $resp, $matches)) {
-            $result = json_decode(stripslashes($matches[0]), true);
-        }
-
-        return $result;
+        App::uses('MongoReplsetMonitor', 'Lib');
+        return MongoReplsetMonitor::getReplsetName($host, $port);
     }
 
     public function pingServer($host) {
-        $begin = microtime(true);
-        $timeout = 2; // micro-seconds
-        exec(sprintf('ping -n 1 -w ' . $timeout . ' %s', escapeshellarg($host)), $res, $rval);
-        $end = microtime(true);
-        CakeLog::info( "pingServer($host) rval[$rval] running offset time:" . ($end - $begin));
-        return $rval === 0;
+        App::uses('Ping', 'Lib');
+        return Ping::pingServer($host);
     }
 
     public function pingServerPort($host, $port) {
-        $timeout = 1; // seconds
-        $status = true;
-        $begin = microtime(true);
-        $fp = @fsockopen($host, $port, $errno, $errstr, $timeout);
-        $end = microtime(true);
-        CakeLog::info( "pingServerPort($host, $port) running offset time:" . ($end - $begin));
-        if (!$fp) {
-            return false;
-        }
-        fclose($fp);
-        return $status;
+        App::uses('Ping', 'Lib');
+        return Ping::pingServerPort($host, $port);
     }
 
     public function callWindowsMongoCmd($host, $port, $shell_command, $parsed = false)
     {
-    
-        if(empty($host) || empty($port) || empty($shell_command)) return false;
-
-        $Wshshell= new COM('WScript.Shell');
-        $installDir= $Wshshell->regRead('HKEY_LOCAL_MACHINE\SOFTWARE\Active Network\ATMongodbService\InstallDir');
-        if (empty($installDir)) {
-            return false;
-        }
-
-        $exe = $installDir . 'MongoDB\bin\mongo.exe';
-        $command = addslashes($shell_command);
-        $commandLine = <<<STR
-start /B "mongoClientWindow" "$exe" $host:$port --quiet --eval "$command"
-STR;
-        $result = shell_exec($commandLine); 
-        if ($parsed) {
-            $result_parsed = $this->parseMongoCmdResp($result);
-            if (!empty($result_parsed)) {
-                $result = $result_parsed;
-            }
-        }
-        return $result;
+        App::uses('MongoShell', 'Lib');
+        return MongoShell::callWindowsCmd($host, $port, $shell_command, $parsed);
     }
 
     public function saveOrUpdateReplset($data){
