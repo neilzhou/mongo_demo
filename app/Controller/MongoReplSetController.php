@@ -1,4 +1,9 @@
 <?php
+App::uses('Ping', 'Lib');
+App::uses('MongoShell', 'Lib');
+App::uses('MongoReplsetMonitor', 'Lib');
+App::uses('MongoReplsetConnection', 'Lib');
+
 class MongoReplSetController extends AppController {
     public $components = array('RequestHandler', 'ScanMongoInstances');
     public $uses = array('MongoReplSet', 'TimingMongoInstance');
@@ -50,7 +55,7 @@ class MongoReplSetController extends AppController {
             if (!empty($list)) {
                 foreach($list as $rs) {
                     $rs_db = $rs['MongoReplSet'];
-                    $rs_status = $this->MongoReplSet->checkReplSetConn($rs_db['rs_name'], $rs_db["members"]);
+                    $rs_status = MongoReplsetMonitor::getMembersStatus($rs_db['rs_name'], $rs_db["members"]);
                     $rs_status['id'] = $rs_db['_id'];
 
                     CakeLog::info('demo index rs db:' . json_encode($rs_db));
@@ -75,7 +80,7 @@ class MongoReplSetController extends AppController {
             if (isset($checked_members[$host . ':'. $port])) {
                 continue;
             }
-            if ($this->MongoReplSet->pingServer($host) && $this->MongoReplSet->pingServerPort($host, $port)) {
+            if (Ping::pingServer($host) && Ping::pingServerPort($host, $port)) {
                 $this->ScanMongoInstances->checkEachMember($host, $port, '', $success_members, $error_members, $checked_members);
             }
         }
@@ -168,7 +173,7 @@ class MongoReplSetController extends AppController {
         $data = empty($rs['MongoReplSet']) ? array() : $rs['MongoReplSet'];
         $status = array();
         if (!empty($data)) {
-            $status = $this->MongoReplSet->checkReplSetConn($data['rs_name'], $data['members']);
+            $status = MongoReplsetMonitor::getMembersStatus($data['rs_name'], $data['members']);
             $status['id'] = $this->MongoReplSet->id;
         }
 
@@ -192,7 +197,7 @@ class MongoReplSetController extends AppController {
     }
 
     private function _getHostPortForCmd($rs_name, $members){
-        $status = $this->MongoReplSet->checkReplSetConn($rs_name, $members);
+        $status = MongoReplsetMonitor::getMembersStatus($rs_name, $members);
         CakeLog::info("_getHostPortForCmd status:" . json_encode($status));
         if (empty($status) || empty($status['data'])) {
             return false;
@@ -275,7 +280,7 @@ class MongoReplSetController extends AppController {
                     $this->renderJsonWithError('Not found valid mongo replset member.', 'ERROR-NO-VALID-MEMBER');
                 }
                 list($host, $port) = explode(':', $host_port);
-                $resp = $this->MongoReplSet->callWindowsMongoCmd($host, $port, $command_line, true);
+                $resp = MongoShell::callWindowsCmd($host, $port, $command_line, true);
                 if (empty($resp['ok'])) {
                     $this->renderJsonWithError($resp['errmsg'], $resp['code'], $resp);
                 }
@@ -285,11 +290,12 @@ class MongoReplSetController extends AppController {
                 $command_line = 'var conf = rs.conf(); conf.members=' . json_encode($members) . ';rs.reconfig(conf);';
                 CakeLog::info("reconfig command line:" . $command_line);
                 try{
-                    $status = $this->MongoReplSet->connectRs($rs['rs_name'], $rs['members'], false);
+                    $manager = new MongoReplsetConnection($rs['rs_name'], $rs['members']);
+                    $status = $manager->connect(false);
                     if (empty($status['success'])) {
                         $this->renderJsonWithError($status['message'], $status['code'], $status['data']);
                     }
-                    $resp = $this->MongoReplSet->getConnection()->execute($command_line);
+                    $resp = $manager->getConnection()->execute($command_line);
                     if (empty($resp['ok'])) {
                         $this->renderJsonWithError($resp['errmsg'], 'ERROR-RECONFIG', $resp);
                     }

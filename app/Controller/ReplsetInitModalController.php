@@ -1,4 +1,5 @@
 <?php
+App::uses('MongoShell', 'Lib');
 class ReplsetInitModalController extends AppController {
     public $components = array('RequestHandler');
     public $uses = array('MongoReplSet');
@@ -26,7 +27,7 @@ class ReplsetInitModalController extends AppController {
 
         $command_line = 'var conf = ' . json_encode($members) . ';rs.initiate(conf);';
 
-        $resp = $this->MongoReplSet->callWindowsMongoCmd($host, $port, $command_line, true);
+        $resp = MongoShell::callWindowsCmd($host, $port, $command_line, true);
         if (isset($resp['ok']) && $resp['ok']){
             $this->renderJsonWithSuccess(array(), "Initialize replica set configuration successfully!");
         }

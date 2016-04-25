@@ -1,4 +1,6 @@
 <?php
+App::uses('MongoReplsetMonitor', 'Lib');
+
 class MongoDemoController extends AppController {
 
     public $uses = array('MongoReplSet', 'TimingMongoInstance');
@@ -16,7 +18,7 @@ class MongoDemoController extends AppController {
             // code...
             foreach($list as $rs) {
                 $rs_db = $rs['MongoReplSet'];
-                $rs_status = $this->MongoReplSet->checkReplSetConn($rs_db['rs_name'], $rs_db["members"]);
+                $rs_status = MongoReplsetMonitor::getMembersStatus($rs_db['rs_name'], $rs_db["members"]);
                 $rs_status['id'] = $rs_db['_id'];
 
                 CakeLog::info('demo index rs db:' . json_encode($rs_db));
@@ -31,12 +33,12 @@ class MongoDemoController extends AppController {
         
             foreach($lan_hosts as $h) {
                 $h = $h['TimingMongoInstance'];
-                //$status = $this->MongoReplSet->mongoReplSetConnectStatus($h['ip'], $h['port']);
-                //if((!$status['success']) && $status['init_replset']) {
+                $status = MongoReplsetMonitor::getStatus($h['ip'], $h['port']);
+                if((!$status['success']) && $status['can_be_added']) {
                 
                     $key = $h['ip'] . ':' . $h['port'];
                     $select_options[$key] = $key;
-                //}
+                }
             }
         }
         $this->set('rs_list', $rs_list);

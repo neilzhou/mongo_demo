@@ -165,7 +165,7 @@ class MongoReplsetMonitor {
             } else if(!empty($resp)) {
                 isset($resp['stateStr']) && ($result['data'][$host_port_key]['rs_status'] = $resp['stateStr']);
                 $error_message && isset($resp['errmsg']) && ($error_message = $resp['errmsg']);
-                $result['data'][$host_port_key]['code'] = $result['code'];
+                $result['data'][$host_port_key]['code'] = $status_code;
                 $error_message && $result['data'][$host_port_key]['message'] = $error_message;
                 //CakeLog::info("error message hostportkey[$host_port_key]: ". $error_message);
             } 
@@ -175,6 +175,7 @@ class MongoReplsetMonitor {
         $result['message'] = $error_message;
         $result['code'] = $status_code;
         $result['init_replset'] = MongoReplsetStatus::canBeInit($status_code);
+        $result['can_be_added'] = MongoReplsetStatus::canBeAdded($status_code);
         //CakeLog::info("check result code:[$status_code], message:[$error_message]");
         return $result;
     }

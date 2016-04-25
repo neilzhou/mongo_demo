@@ -1,5 +1,6 @@
 <?php
 App::uses('Component', 'Controller');
+App::uses('MongoReplsetMonitor', 'Lib');
 /**
  * This class is used to scan mongo instances in LAN range.
  *
@@ -66,7 +67,7 @@ class ScanMongoInstancesComponent extends Component
                 'port' => $port
             )
         );
-        $check_status = $this->loadModel('MongoReplSet')->checkReplSetConn($rs_name, $check_member);
+        $check_status = MongoReplsetMonitor::getMembersStatus($rs_name, $check_member);
 
         if ($remove_no_repl
             && empty($check_status['success']) 

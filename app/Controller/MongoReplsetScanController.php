@@ -1,4 +1,5 @@
 <?php
+App::uses('Ping', 'Lib');
 class MongoReplsetScanController extends AppController {
     public $components = array('RequestHandler', 'ScanMongoInstances');
     public $uses = array('MongoReplSet');
@@ -34,8 +35,8 @@ class MongoReplsetScanController extends AppController {
             }
             $time1 = microtime(true);
             if(
-                $this->MongoReplSet->pingServer($check_ip) 
-                && $this->MongoReplSet->pingServerPort($check_ip, $port)
+                Ping::pingServer($check_ip) 
+                && Ping::pingServerPort($check_ip, $port)
             ) {
                 $this->ScanMongoInstances->checkEachMember($check_ip, $port, $rs_name, $result, $errors, $checked_members);
             }

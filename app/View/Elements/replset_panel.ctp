@@ -45,8 +45,9 @@ endif;
             <tbody>
 <?php 
 $index = 1;
+App::uses('MongoReplsetStatus', 'Lib');
 foreach($rs_members as $m):
-    $tr_class = empty($m['success']) ? (!empty($m['code']) && $m['code'] == 'ERROR-NO-REPLSET-CONFIG' ? 'warning' : 'danger') : '';
+    $tr_class = empty($m['success']) ? (!empty($m['code']) && MongoReplsetStatus::canBeInit($m['code']) ? 'warning' : 'danger') : '';
 ?>
             <tr class="<?php echo $tr_class; ?>">
                 <th scope="row"><?php echo $index;?></th>

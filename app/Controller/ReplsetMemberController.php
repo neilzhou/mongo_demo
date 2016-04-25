@@ -1,4 +1,6 @@
 <?php
+App::uses('MongoReplsetConnection', 'Lib');
+
 class ReplsetMemberController extends AppController {
 
     public $uses = array('MongoReplSet');
@@ -31,12 +33,13 @@ class ReplsetMemberController extends AppController {
             $this->renderJsonWithError('The replica set does not exist, please check.', 'ERROR-EMPTY-RS', $rs);
         }
         $rs = $rs['MongoReplSet'];
-        $status = $this->MongoReplSet->connectRs($rs['rs_name'], $rs['members'], false);
+        $manager = new MongoReplsetConnection($rs['rs_name'], $rs['members']);
+        $status = $manager->connect(false);
         if (empty($status['success'])) {
             $this->renderJsonWithError($status['message'], $status['code'], $status['data']);
         }
         try {
-            $conn = $this->MongoReplSet->getConnection();
+            $conn = $manager->getConnection();
             $rs_status = $conn->execute('rs.conf()');
             CakeLog::info("config tstatus:" . json_encode($rs_status));
             $votes_threshold = 7;
@@ -108,7 +111,8 @@ class ReplsetMemberController extends AppController {
             }
         }
 
-        $status = $this->MongoReplSet->connectRs($rs['rs_name'], $rs['members'], false);
+        $manager = new MongoReplsetConnection($rs['rs_name'], $rs['members']);
+        $status = $manager->connect(false);
         CakeLog::info("MongoReplSet status:" . json_encode($status));
         if (empty($status['success'])) {
             // delete only from DB when couldn't'connect to replica set and the member status is false.
@@ -125,9 +129,9 @@ class ReplsetMemberController extends AppController {
 
         }
         try {
-            $conn = $this->MongoReplSet->getConnection();
+            $conn = $manager->getConnection();
 
-            $cmd_line = $this->MongoReplSet->formatSql('rs.remove("%s")', $data['host'].':'.$data['port']);
+            $cmd_line = $manager->formatSql('rs.remove("%s")', $data['host'].':'.$data['port']);
             $result = $conn->execute($cmd_line);
             CakeLog::info("remove member status:" . json_encode($result));
             //echo json_encode($result);exit;

@@ -69,6 +69,18 @@ class MongoReplsetStatus {
     public static function canBeInit($code) {
         $array = array(
             self::REPLSET_NO_CONFIG => 1,
+            //self::REPLSET_REMOVED => 1,
+        );
+        return isset($array[$code]);
+    }
+
+    /**
+     * @desc check if the member can be added into replica set.
+     */
+    public static function canBeAdded($code) {
+    
+        $array = array(
+            self::REPLSET_NO_CONFIG => 1,
             self::REPLSET_REMOVED => 1,
         );
         return isset($array[$code]);
@@ -78,15 +90,13 @@ class MongoReplsetStatus {
      * @desc check if the response of mongo shell cmd can be parsed as array, so that we can parse it and get members details.
      */
     public static function canBeParse($code){
-        $array = array(
-            self::NO_ERROR => 1,
-            self::REPLSET_NO_PRIMARY => 1,
-            self::REPLSET_NO_MEMBERS => 1,
-            self::REPLSET_NOT_RUNNING => 1,
-            self::REPLSET_REMOVED=> 1,
-            self::PARSED_OTHERS => 1
+        $except_array = array(
+            self::EMPTY_RESPONSE => 1,
+            self::CONNECT_FAILED => 1,
+            self::REPLSET_NAME_NOT_MATCH => 1,
+            self::REPLSET_NO_NAME => 1
         );
-        return isset($array[$code]);
+        return ! isset($except_array[$code]);
     }
 
     private static function matchError($resp, $map_code) {
@@ -101,6 +111,7 @@ class MongoReplsetStatus {
             self::REPLSET_NOT_RUNNING => 'Does not running with --replSet.',
             self::REPLSET_NO_CONFIG => 'Does not have a vallid replica set config.',
             self::REPLSET_REMOVED=> 'Does not have a vallid replica set config.',
+            self::REPLSET_NO_PRIMARY => 'The replica set has no primary member.',
             self::REPLSET_NAME_NOT_MATCH=> 'Couldn\'t connect to replset name: ' . $rs_name,
             self::NO_ERROR => 'OK!',
             self::UNKNOWN => ''
@@ -117,9 +128,9 @@ class MongoReplsetStatus {
         return array(
             self::CONNECT_FAILED => 'connection attempt failed',
             self::REPLSET_NOT_RUNNING => 'not running with --replSet',
-            self::REPLSET_NO_NAME=> '',
-            self::REPLSET_NO_CONFIG => 'run rs.initate(',
+            self::REPLSET_NO_CONFIG => 'run rs.initiate(',
             self::REPLSET_REMOVED => '"stateStr" : "REMOVED"',
+            self::REPLSET_NO_NAME=> '',
             self::REPLSET_NAME_NOT_MATCH => $rs_conds,
             self::REPLSET_NO_MEMBERS => array(
                 'not' => '"members"'

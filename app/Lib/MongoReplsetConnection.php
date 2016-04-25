@@ -130,4 +130,8 @@ class MongoReplsetConnection {
     public function getConnection() {
         return $this->_conn;
     }
+
+    public function formatSql($format, $args) {
+        return sprintf($format, addslashes($args));
+    }
 }

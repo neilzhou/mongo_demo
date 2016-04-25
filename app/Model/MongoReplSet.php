@@ -2,7 +2,6 @@
 class MongoReplSet extends AppModel{
 	public $primaryKey = '_id';
 
-    private $_conn = false;
 	//var $useDbConfig = 'mongo';
 
     var $mongoSchema = array(
@@ -18,83 +17,6 @@ class MongoReplSet extends AppModel{
             'created'=>array('type'=>'datetime'),
             'modified'=>array('type'=>'datetime'),
     );
- 
-    /**
-     * connectRs
-     * @return array("success" => true| false, "message" => xxx, "data" => array(), "code" => "SUCCESS|ERROR")
-     * @author Neil.zhou
-     **/
-    public function connectRs($rs_name, $members, $check_status = true){
-        App::uses('MongoReplsetConnection', 'Lib');
-        $connection = new MongoReplsetConnection($rs_name, $members);
-        $result = $connection->connect($check_status);
-        $this->_conn = $connection->getConnection();
-        return $result;
-    }
-
-    public function getConnection() {
-        return $this->_conn;
-    }
-    public function formatSql($format, $args) {
-        return sprintf($format, addslashes($args));
-    }
-
-    /**
-     * checkReplSetConn
-     *
-     * @return array(
-     *         'success' => true|false
-     *         'code' => xxx
-     *         'rs_name' => xxx
-     *         'message' => xxx
-     *         'data' => array(
-     *          '0' => array(
-     *             'success' => true|false,
-     *             'code' => xxx,
-     *             'message' => xxx,
-     *             'host' => xxx
-     *             'port' => xxx
-     *             'check_name'' => xxx,
-     *             'rs_status' => xxx,
-     *             'conn_status' => xxx
-     *         )
-     *       )
-     * )
-     *
-     */
-    public function checkReplSetConn($rs_name, $members)
-    {
-        App::uses('MongoReplsetMonitor', 'Lib');
-        return MongoReplsetMonitor::getMembersStatus($rs_name, $members);
-    }
-    
-
-    public function mongoReplSetConnectStatus($host, $port, $rs_name = 'rs0')
-    {
-        App::uses('MongoReplsetMonitor', 'Lib');
-        return MongoReplsetMonitor::getStatus($host, $port, $rs_name);
-    }
-
-    public function getMongoReplsetName($host, $port) {
-        App::uses('MongoReplsetMonitor', 'Lib');
-        return MongoReplsetMonitor::getReplsetName($host, $port);
-    }
-
-    public function pingServer($host) {
-        App::uses('Ping', 'Lib');
-        return Ping::pingServer($host);
-    }
-
-    public function pingServerPort($host, $port) {
-        App::uses('Ping', 'Lib');
-        return Ping::pingServerPort($host, $port);
-    }
-
-    public function callWindowsMongoCmd($host, $port, $shell_command, $parsed = false)
-    {
-        App::uses('MongoShell', 'Lib');
-        return MongoShell::callWindowsCmd($host, $port, $shell_command, $parsed);
-    }
 
     public function saveOrUpdateReplset($data){
         $id = empty($data['_id']) ? 0 : $data['_id'];
