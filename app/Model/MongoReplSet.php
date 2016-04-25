@@ -312,61 +312,15 @@ class MongoReplSet extends AppModel{
         CakeLog::info("rs.status raw data:" . $status);
         $result['detail'] = $status;
         $parse_status = false;
-
-        if (empty($status)) {
-            $result['code'] = 'ERROR-CALL-WIN-MONGO-CMD';
-            $result['data']["$host_port_key"]['conn_status'] = 'Failed';
-            return $result;
-
-        } else if(strpos($status, 'connection attempt failed') !== false) {
-            $result['code'] = 'ERROR-CONNECTION-FAILED';
-            $result['data'][$host_port_key]['message'] = $result['message'] = 'Couldn\'t connect to server ' . $host . ':' . $port . '.';
-            $result['data']["$host_port_key"]['conn_status'] = 'Failed';
-            return $result;
-
-        } else if(strpos($status, 'not running with --replSet') !== false) {
-            $result['code'] = 'ERROR-NO-RUNNING-WITH-REPLSET';
-            $result['data'][$host_port_key]['message'] = $result['message'] = 'Does not running with --replSet.';
-            $result['data'][$host_port_key]['rs_status'] = 'no option --replSet.';
-            return $result;
-
-        } 
-
         if (empty($rs_name)) {
             $rs_name = $this->getMongoReplsetName($host, $port);
             $result['rs_name'] = $rs_name;
-            if (empty($rs_name)) {
-                $result['code'] = 'ERROR-NO-REPLSET-NAME';
-                $result['message'] = 'Does not get replica set name.';
-            }
         }
-
-        if(strpos($status, 'run rs.initiate(') !== false) {
-            $result['code'] = 'ERROR-NO-REPLSET-CONFIG';
-            $result['message'] = 'Does not have a vallid replica set config.';
-            $result['init_replset'] = true;
-
-        } else if(strpos($status, '"set"') !== false && strpos($status, '"set" : "'.$rs_name.'"') === false) {
-            $result['code'] = 'ERROR-REPLSET-NAME-NOT-MATCH';
-            $result['message'] = 'Couldn\'t connect to replset name: ' . $rs_name;
-
-        } else if(strpos($status, '"stateStr" : "PRIMARY"') !== false) {
-            $result['success'] = true;
-            $result['code'] = 'SUCCESS';
-            $result['message'] = 'OK!';
-            $parse_status = true;
-
-        } else if(strpos($status, '"members"') !== false) {
-            $parse_status = true;
-            $result['code'] = 'ERROR-NO-PRIMARY';
-
-        } else if(strpos($status, '"ok"') !== false) {
-            $parse_status = true;
-            $result['code'] = 'ERROR-OTHERS';
-
-        } else {
-            $result['code'] = 'ERROR-UNKNOWN';
-        }
+        App::uses('MongoReplsetStatus', 'Lib');
+        $status_code = MongoReplsetStatus::statusCode($status, $rs_name);
+        $error_message = MongoReplsetStatus::getMessage($status_code, $result['rs_name']);
+        $parse_status = MongoReplsetStatus::canBeParse($status_code);
+        $result['success'] = MongoReplsetStatus::isSuccess($status_code);
 
         $result['data'][$host_port_key]['message'] = $result['message'];
 
@@ -390,11 +344,18 @@ class MongoReplSet extends AppModel{
                 }
             } else if(!empty($resp)) {
                 isset($resp['stateStr']) && ($result['data'][$host_port_key]['rs_status'] = $resp['stateStr']);
-                isset($resp['errmsg']) && ($result['data'][$host_port_key]['message'] = $resp['errmsg']);
+                $error_message && isset($resp['errmsg']) && ($error_message = $resp['errmsg']);
                 $result['data'][$host_port_key]['code'] = $result['code'];
+                $error_message && $result['data'][$host_port_key]['message'] = $error_message;
+                //CakeLog::info("error message hostportkey[$host_port_key]: ". $error_message);
             } 
         }
-        CakeLog::info("check cmd rs.status hostport result:" . json_encode($result));
+        //CakeLog::info("check cmd rs.status hostport result:" . json_encode($result));
+        if(empty($error_message)) $error_message = $status;
+        $result['message'] = $error_message;
+        $result['code'] = $status_code;
+        $result['init_replset'] = MongoReplsetStatus::canBeInit($status_code);
+        //CakeLog::info("check result code:[$status_code], message:[$error_message]");
         return $result;
     }
 
