@@ -51,7 +51,7 @@ class MongoReplsetConnection {
             if ($this->_conn->connected) {
                 // code...
                 if ($check_status) {
-                    $result = $this->getRsStatus($this->_conn, $rs_name, $members);
+                    $result = $this->getRsStatus($rs_name, $members);
                 } else {
                     $result['success'] = true;
                     $result['message'] = "OK!";
@@ -76,7 +76,8 @@ class MongoReplsetConnection {
     }
 
 
-    private function getRsStatus($conn, $rs_name, $members) {
+    private function getRsStatus($rs_name, $members) {
+        $conn = $this->_conn;
         $result = array(
             'success' => false,
             'message' => 'Connect mongo failed.',

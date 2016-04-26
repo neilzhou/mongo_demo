@@ -26,7 +26,7 @@ class MongoReplSetController extends AppController {
             $port = $this->request->data('MongoReplSet.port');
 
             if ($scanInLan) {
-                $status = $this->_scanAllLan($port, $rs_name);
+                $status = $this->_scanAllLan($rs_name);
             } else {
                 $range = array();
                 $range['from'] = $this->request->data('MongoReplSet.from_host');
@@ -66,7 +66,7 @@ class MongoReplSetController extends AppController {
             $this->set('rs_list', $rs_list);
         }
 	}
-    private function _scanAllLan($port, $rs_name) {
+    private function _scanAllLan($rs_name) {
         $success_members= array();
         $checked_members = array();
         $error_members = array();
@@ -75,7 +75,7 @@ class MongoReplSetController extends AppController {
         if(empty($list)) return array();
         foreach ($list as $item) {
             $item = current($item);
-            $host = $item['host'];
+            $host = $item['ip'];
             $port = $item['port'];
             if (isset($checked_members[$host . ':'. $port])) {
                 continue;

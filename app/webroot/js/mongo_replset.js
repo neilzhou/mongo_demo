@@ -54,9 +54,11 @@ $(document).ready(function(){
         if (this.checked) {
             $('#ScanFromHost').attr('disabled', true);
             $('#ScanToHost').attr('disabled', true);
+            $('#ScanPort').attr('disabled', true);
         } else {
             $('#ScanFromHost').attr('disabled', false);
             $('#ScanToHost').attr('disabled', false);
+            $('#ScanPort').attr('disabled', false);
         }
     });
 

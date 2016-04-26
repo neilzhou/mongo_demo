@@ -75,6 +75,8 @@ echo $this->Form->input('scan_all_lan', array(
         'text' => 'Port:'
     ),
     //'placeholder' => 'Port'
+    'disabled' => true,
+    'id' => 'ScanPort',
     'placeholder' => '27017',
     'value' => '27017'
 ));
