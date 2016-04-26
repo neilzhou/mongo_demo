@@ -91,7 +91,7 @@ class MongoReplsetMonitor {
             }
         }
         $time3 = microtime(true);
-        CakeLog::info("checkReplSetConn rsname[$rs_name] offset:" .($time3 - $time1). ", cmd check members offset:" . ($time3 - $time1));
+        //CakeLog::info("checkReplSetConn rsname[$rs_name] offset:" .($time3 - $time1). ", cmd check members offset:" . ($time3 - $time1));
         return $status;
     }
 
@@ -176,7 +176,7 @@ class MongoReplsetMonitor {
         $result['code'] = $status_code;
         $result['init_replset'] = MongoReplsetStatus::canBeInit($status_code);
         $result['can_be_added'] = MongoReplsetStatus::canBeAdded($status_code);
-        //CakeLog::info("check result code:[$status_code], message:[$error_message]");
+        //CakeLog::info("check result parse_status:[$parse_status] code:[$status_code], message:[$error_message], return result:". json_encode($result));
         return $result;
     }
 
@@ -193,5 +193,28 @@ class MongoReplsetMonitor {
         }
         $arr = MongoShell::parse($resp);
         return empty($arr['replSetName']) ? false : $arr['replSetName'];
+    }
+
+    /**
+     * @desc get one replset member name using mongo shell, eg. '127.0.0.1:27017', which is used when reconfig by force.
+     */
+    public function getReplsetMemberName($rs_name, $members){
+        $status = self::getMembersStatus($rs_name, $members);
+        CakeLog::info("_getHostPortForCmd status:" . json_encode($status));
+        if (empty($status) || empty($status['data'])) {
+            return false;
+        }
+        $host_port = '';
+        foreach ($status['data'] as $m) {
+            if ($m['success']) {
+                $host_port = $m['check_name'];
+                break;
+            } elseif(MongoReplsetStatus::isMember($m['code'])) {
+                $host_port = $m['check_name'];
+                break;
+            }
+        }
+        CakeLog::info("_getHostPortForCmd hostport:" . $host_port);
+        return $host_port;
     }
 }

@@ -1,6 +1,8 @@
 <?php
 App::uses('Component', 'Controller');
 App::uses('MongoReplsetMonitor', 'Lib');
+App::uses('Ping', 'Lib');
+App::uses('MongoShell', 'Lib');
 /**
  * This class is used to scan mongo instances in LAN range.
  *
@@ -12,13 +14,107 @@ class ScanMongoInstancesComponent extends Component
 {
 
     /**
+     * @desc scan computers which has installed ActiveTiming program in LAN.
+     */
+    public function scanAllLan($rs_name = '') {
+
+        $success_members= array();
+        $checked_members = array();
+        $error_members = array();
+
+        $list = $this->loadModel('TimingMongoInstance')->find('all');
+        if(empty($list)) return array();
+        foreach ($list as $item) {
+            $item = current($item);
+            $host = $item['ip'];
+            $port = $item['port'];
+            if (isset($checked_members[$host . ':'. $port])) {
+                continue;
+            }
+            if (Ping::pingServer($host) && Ping::pingServerPort($host, $port)) {
+                $this->checkEachMember($host, $port, '', $success_members, $error_members, $checked_members);
+            }
+        }
+
+        $this->loadModel('MongoReplSet')->saveRsMembers($success_members);
+        $this->loadModel('MongoReplSet')->saveRsMembers($error_members);
+
+        return $success_members;
+    }
+
+    /**
      * This function is to scan the ip range in LAN
-     * @return void
+     * @return array
      * @author Neil.zhou
      **/
-    public function scanRange($from_ip, $to_ip, $port = 27017, $rs_name = '') {
-    
+    public function scanRange($range, $port, $rs_name) {
+        if (empty($range) || empty($range['from']) || empty($range['to'])) {
+            return false;
+        }
+
+        $mh = curl_multi_init();
+        $curl = $data = array();
+
+        $from_ip32_int = ip2long($range['from']);
+        $to_ip32_int = ip2long($range['to']);
+        if (($from_ip32_int === false) || ($to_ip32_int === false)) {
+            return false;
+        }
+
+        $offset_int = ceil(($to_ip32_int - $from_ip32_int) / 50);
+        $offset_int = $offset_int > 16 ? $offset_int : 16;
+
+        for ($i = $from_ip32_int; $i <= $to_ip32_int; $i++) {
+            $from_ip = long2ip($i);
+            $i += $offset_int;//255 * 1;
+            $end_ip = $i > $to_ip32_int ? long2ip($to_ip32_int) : long2ip($i);
+
+            $url = Router::url(array(
+                'controller' => 'mongo_replset_scan',
+                'action' => 'index',
+                'from' => urlencode($from_ip),
+                'to' => urlencode($end_ip),
+                'port' => $port,
+                'rs_name' => $rs_name
+            ), true);
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            curl_setopt($ch, CURLOPT_HEADER, 0);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30 * 60);
+            curl_multi_add_handle($mh, $ch);
+            $curl[] = $ch;
+        }
+
+        $active = null;
+        $i = $j = $x = 0;
+        do {
+            $mrc = curl_multi_exec($mh, $active);
+            $i ++;
+        } while ($mrc == CURLM_CALL_MULTI_PERFORM);
+
+        while($active && $mrc == CURLM_OK) {
+            if (curl_multi_select($mh) == -1) {
+                $x ++;
+                //usleep(100);
+            }
+            do {
+                $j++;
+                $mrc = curl_multi_exec($mh, $active);
+            } while ($mrc == CURLM_CALL_MULTI_PERFORM);
+        }
+        
+        CakeLog::info('scan multiple count['.count($curl).'] offset_int:['.$offset_int.'], i:' . $i . ', j:' . $j . ', x:' . $x);
+        foreach ($curl as $c) {
+            $data[] = curl_multi_getcontent($c);
+            curl_multi_remove_handle($mh, $c);
+        }
+        curl_multi_close($mh);
+        return $data;
     }
+
 
     /**
      * check mongo instance status

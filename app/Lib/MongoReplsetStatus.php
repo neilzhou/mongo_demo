@@ -24,6 +24,14 @@ class MongoReplsetStatus {
         return $code == self::NO_ERROR;
     }
 
+    public static function isMember($code) {
+        $array = array(
+            self::NO_ERROR => 1,
+            self::REPLSET_NO_PRIMARY => 1
+        );
+        return isset($array[$code]);
+    }
+
     public static function getMessage($code, $rs_name='') {
         $messages = self::mappingMessages($rs_name);
         CakeLog::info("get messages rsname[$rs_name], code[$code]:" . json_encode($messages));
