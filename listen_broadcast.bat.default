@@ -1,0 +1,6 @@
+@echo off
+set workDir=%~dp0
+cd "%workDir%mongo_mgm\app"
+set Path=%Path%;%workDir%php5_x64
+%workDir%mongo_mgm\lib\Cake\Console\cake Broadcast listen
+pause
